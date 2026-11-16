@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 
+from .capabilities import CapabilityReporter
 from .config import RigConfig
 from .server import build_server
 from .ssh_transport import SshTransport, connect_uart, make_ssh_runner
@@ -18,7 +19,7 @@ from .state import StateStore
 from .tools import RigTools
 
 
-def build_live_tools(config: RigConfig) -> tuple[RigTools, StateStore]:
+def build_live_tools(config: RigConfig) -> tuple[RigTools, StateStore, CapabilityReporter]:
     runner = make_ssh_runner(
         host=config.pi_host,
         user=config.pi_user,
@@ -33,14 +34,15 @@ def build_live_tools(config: RigConfig) -> tuple[RigTools, StateStore]:
     )
     tools = RigTools(transport, read_timeout=config.uart_read_timeout)
     store = StateStore(config.state_root)
+    reporter = CapabilityReporter.from_config(config, transport)
 
-    return tools, store
+    return tools, store, reporter
 
 
 def main() -> None:
     config = RigConfig.from_env(os.environ)
-    tools, store = build_live_tools(config)
-    build_server(tools, store).run("stdio")
+    tools, store, reporter = build_live_tools(config)
+    build_server(tools, store, reporter).run("stdio")
 
 
 if __name__ == "__main__":

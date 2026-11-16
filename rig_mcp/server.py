@@ -9,16 +9,36 @@ from __future__ import annotations
 
 from mcp.server.mcpserver import MCPServer
 
+from .capabilities import CapabilityReporter
 from .state import StateStore
 from .tools import RigTools
 
 
-def build_server(tools: RigTools, store: StateStore, name: str = "raspudger-rig") -> MCPServer:
+def build_server(
+    tools: RigTools,
+    store: StateStore,
+    reporter: CapabilityReporter,
+    name: str = "raspudger-rig",
+) -> MCPServer:
     app = MCPServer(name)
+
+    @app.tool()
+    def rig_capabilities() -> dict[str, object]:
+        return reporter.report()
 
     @app.tool()
     def pi_exec(command: str, timeout_s: float = 30.0) -> dict[str, object]:
         return tools.pi_exec(command, timeout_s)
+
+    @app.tool()
+    def list_scripts() -> dict[str, object]:
+        return tools.list_scripts()
+
+    @app.tool()
+    def run_script(
+        name: str, args: list[str] | None = None, timeout_s: float = 30.0
+    ) -> dict[str, object]:
+        return tools.run_script(name, args, timeout_s)
 
     @app.tool()
     def uart_send(data: str) -> dict[str, object]:

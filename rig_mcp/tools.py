@@ -12,6 +12,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from .script_runner import (
+    ScriptNotFoundError,
+    available_scripts,
+    build_command,
+    load_script,
+)
 from .transport import Transport
 
 
@@ -23,6 +29,28 @@ class RigTools:
     read_timeout: float = 0.1
 
     def pi_exec(self, command: str, timeout_s: float = 30.0) -> dict[str, object]:
+        result = self.transport.exec(command, timeout_s)
+        return {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode,
+        }
+
+    def list_scripts(self) -> dict[str, object]:
+        return {"scripts": available_scripts()}
+
+    def run_script(
+        self,
+        name: str,
+        args: list[str] | None = None,
+        timeout_s: float = 30.0,
+    ) -> dict[str, object]:
+        try:
+            body = load_script(name)
+        except ScriptNotFoundError as error:
+            return {"error": str(error), "scripts": available_scripts()}
+
+        command = build_command(body, args or [])
         result = self.transport.exec(command, timeout_s)
         return {
             "stdout": result.stdout,
