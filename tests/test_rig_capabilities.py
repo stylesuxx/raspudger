@@ -42,6 +42,24 @@ def test_declared_interfaces_cover_uart_and_power() -> None:
     by_name = {interface.name: interface.detail for interface in declared}
     assert by_name["uart"] == {"tx_pin": 14, "host": "pi.local", "port": 5000}
     assert by_name["power"] == {"pin": 17, "active_high": True}
+    assert "network" not in by_name
+
+
+def test_declared_interfaces_include_network_when_configured() -> None:
+    config = RigConfig.from_env(
+        {
+            "RIG_PI_HOST": "pi.local",
+            "RIG_PIN_POWER": "17",
+            "RIG_PIN_UART_TX": "14",
+            "RIG_DUT_NET_SSID": "raspudger-test",
+            "RIG_DUT_NET_PSK": "sekret",
+            "RIG_DUT_NET_SUBNET": "192.168.10.0/24",
+        }
+    )
+    by_name = {interface.name: interface.detail for interface in declared_interfaces(config)}
+    assert by_name["network"] == {"ssid": "raspudger-test", "subnet": "192.168.10.0/24"}
+    # The PSK is never in the capability declaration.
+    assert "sekret" not in str(by_name["network"])
 
 
 def test_parse_serial_devices_sorts_and_dedupes() -> None:
