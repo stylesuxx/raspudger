@@ -1,8 +1,7 @@
 """Per-device state store, backed by one JSON file per device.
 
 Writes are atomic (write a temp file, then rename), so a killed session cannot
-leave a half-written state. Device identity is just the directory key here; the
-slug plus fingerprint logic is Milestone 5.
+leave a half-written state. The device is the directory key.
 """
 
 from __future__ import annotations

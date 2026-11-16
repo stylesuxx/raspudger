@@ -3,16 +3,16 @@
 An AI agent that probes embedded devices to find vulnerabilities over a hardware
 interface. A Raspberry Pi acts as the physical bridge to a device under test
 (DUT); an agent on a separate host drives the Pi to interrogate the device,
-looking for both previously unknown flaws and known issues (public CVE data).
+looking for previously unknown vulnerabilities.
 
 > Status: early development. The host wrapper, the rig MCP server, the SSH/UART
-> transport, provisioning, and a container sim all work end to end; the remaining
-> gap is validation on real Pi hardware.
+> transport, provisioning, and a container sim all work end to end, and the spine
+> runs on a real Raspberry Pi 3 driving the ESP32-C3 test DUT over UART.
 
 ## What it is
 
 A reproducible bench for authorized security testing of embedded hardware. Attach
-a DUT to the Pi over UART (more interfaces later: SPI flash, JTAG), point the
+a DUT to the Pi over UART, point the
 agent at the Pi, and give it an objective such as "find vulnerabilities in this
 device." The agent interacts with the device, captures evidence, and analyzes it
 on the host.
@@ -28,8 +28,8 @@ Design principles:
 - Credentials are scoped and contained. The agent uses your Claude subscription
   login in the gitignored agent home; the Pi SSH key is mounted in and used only
   by the rig MCP server.
-- The tool surface grows from use. The agent has a general shell on the Pi plus
-  guarded tools for dangerous or structured actions.
+- The agent has a general shell on the Pi plus guarded tools for dangerous or
+  structured actions.
 
 ## How it works
 
@@ -48,6 +48,86 @@ Findings land in the project folder, keyed per device.
 
 The hardware tools: `pi_exec`, `uart_send`, `uart_expect`, `uart_exchange`,
 `dut_power`, `dut_power_cycle`, `state_get`, `state_record_finding`.
+
+## Design
+
+### Three layers, the Pi stays dumb
+
+The rig is three layers: the DUT, the disposable Pi, and the clean host. The Pi
+owns physical I/O (the UART and the power relay) and runs only `sshd`, ser2net,
+and provisioning scripts, holding no durable state. All heavy lifting (firmware
+extraction, analysis, per-device state) is host-side. Keeping the Pi dumb is what
+makes it replaceable: wipe and re-flash it without losing anything. The trust
+boundary around it is covered in Security model below.
+
+### Tool surface: guarded core plus open shell
+
+The boundary is a shell, not a schema. The agent has a general execution channel
+(`pi_exec`) and composes what it needs, so no action is ever blocked. A small set
+of typed, guarded tools covers the few actions that are dangerous or benefit from
+structure. Raw shell is the floor and is always available.
+
+An action earns a typed tool when any of these holds:
+
+- it is physical or irreversible (power, reset, reflash);
+- it needs an interlock the agent could get wrong (the power-cycle UART tristate);
+- it must be atomic and distinctly logged for the audit trail;
+- it is run often enough that reliability beats flexibility;
+- a structured return materially helps the agent reason (a UART read as matched
+  prompt, bytes, and timeout flag rather than scraped terminal text).
+
+Everything else stays raw shell. The guarded tools do not run on the Pi; they run
+host-side in the rig MCP server, which holds the Pi SSH key and executes over the
+segmented network. The agent calls the tools and never holds the key or reaches
+the Pi directly.
+
+### The power-cycle interlock
+
+Power-cycling the DUT is a sequence with a safety interlock, which is why it is a
+guarded tool rather than a raw GPIO toggle. `dut_power_cycle` runs it so the agent
+cannot skip a step and chase a half-booted DUT:
+
+1. tristate the UART TX so the Pi does not back-power the DUT through its I/O
+   protection diodes;
+2. cut power;
+3. wait the configured off interval;
+4. restore power;
+5. re-open the UART.
+
+The same back-power interlock applies whenever DUT power is cut.
+
+### Agent-agnostic front-ends on one tool substrate
+
+The container runs the agent's own CLI as a full session, not a custom loop. A
+per-agent adapter knows how to launch that CLI and register the rig MCP server
+with it, so swapping the adapter changes the brain and nothing else. Two
+front-end kinds sit on the same MCP tool substrate: a mature agent CLI (Claude
+Code is the reference, bringing its own tool loop, permissions, and resumable
+sessions), or a thin provider-neutral API loop for a model whose CLI cannot mount
+MCP. The rig integration is written once, against MCP.
+
+### Control-channel protection
+
+The agent has a sudo shell on the Pi and could sever its own control link (on a
+Zero 2 W the control channel is the onboard WiFi). A priming rule covers every
+board: do not touch the interface the SSH control connection arrives on
+(derivable from `SSH_CONNECTION` / `ip route get`), its managing service, `sshd`,
+or firewall rules, and stop and ask if a task seems to need it. The rule is
+advisory, so manual repower is the backstop until automated recovery exists.
+
+### UART electrical limits
+
+The core interface is the Pi's built-in UART on GPIO14 (TX) / GPIO15 (RX), 3.3 V
+logic. It has no galvanic isolation: the DUT wires straight into the Pi's SoC
+pins, which is acceptable for known-good DUTs. For unknown or possibly hostile
+devices, a digital UART isolator (ADuM-based) protects the host behind the
+disposable Pi. One hardware UART means one DUT at a time.
+
+### Scope of the core
+
+The core is UART plus a power relay. Planned but outside the core: SPI flash tap,
+JTAG/SWD, logic analyzer, boot-strap pins, current sense, WiFi testing, and
+multiple DUTs at once.
 
 ## Prerequisites
 
@@ -261,9 +341,11 @@ For headless use with no browser, put one credential in a dotenv file passed wit
 
 ## Security model
 
-- The agent runs in a hardened container it cannot break out of. The worst case
-  from a prompt injection is bounded to the current project state, which is
-  snapshotted and recoverable.
+- The agent runs in a container that bounds a prompt injection from untrusted DUT
+  output to what the container can reach: the mounted project folder, the Pi SSH
+  key, and the subscription login. The container is the trust boundary; tightening
+  its egress and break-out surface, and snapshotting project state for rollback,
+  are tracked as follow-up work.
 - The subscription login lives in the gitignored agent home mounted into the
   container; if leaked it allows subscription use as you until revoked, not
   account takeover or API billing.
