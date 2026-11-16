@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+
+# operator data and secrets (user-managed, never committed)
+data/
+auth/
+*.env
+!*.env.example
+
+# Host-specific MCP wiring; commit .mcp.json.example instead
+.mcp.json

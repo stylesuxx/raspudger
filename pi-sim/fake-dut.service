@@ -1,0 +1,9 @@
+[Unit]
+Description=Fake DUT console (dev sim)
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/fake-dut.py /run/dut-serial
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

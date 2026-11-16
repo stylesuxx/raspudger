@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "rig": {
+      "command": "rig-mcp-server",
+      "env": {
+        "RIG_PI_HOST": "pi.rig.local",
+        "RIG_PI_USER": "rig",
+        "RIG_PI_SSH_KEY": "/run/secrets/rig_pi_key",
+        "RIG_PI_SSH_PORT": "22",
+        "RIG_PI_KNOWN_HOSTS": "/var/lib/rig/pi-known_hosts",
+        "RIG_UART_PORT": "5000",
+        "RIG_PIN_POWER": "17",
+        "RIG_PIN_UART_TX": "14",
+        "RIG_POWER_ACTIVE_HIGH": "false"
+      }
+    }
+  }
+}

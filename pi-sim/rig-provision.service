@@ -1,0 +1,16 @@
+[Unit]
+Description=Run rig provisioning once (dev sim)
+After=fake-dut.service
+Wants=fake-dut.service
+ConditionPathExists=!/var/lib/rig/provisioned
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=RIG_USER=rig
+Environment=RIG_UART_DEVICE=/run/dut-serial
+ExecStart=/opt/rig/provision.sh
+ExecStartPost=/usr/bin/install -D /dev/null /var/lib/rig/provisioned
+
+[Install]
+WantedBy=multi-user.target

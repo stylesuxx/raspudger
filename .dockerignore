@@ -1,0 +1,9 @@
+.git
+.venv
+data
+auth
+**/__pycache__
+**/*.pyc
+*.env
+!*.env.example
+.mcp.json

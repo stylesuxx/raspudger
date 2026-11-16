@@ -1,0 +1,30 @@
+name: raspudger
+services:
+  pi-sim:
+    build:
+      context: .
+      dockerfile: pi-sim/Dockerfile
+      args:
+        RIG_PUBKEY: ${RIG_PUBKEY:-}
+    # systemd as PID 1 needs all four of these; drop any one and init exits 255
+    # before it can log. cgroup v2 host: a writable cgroup tree (cgroup: host +
+    # the rw mount), apparmor off, and systempaths=unconfined to unmask the
+    # /proc and /sys paths systemd writes. This replaces `privileged: true`,
+    # which also worked but mounted the host's entire /dev into the container,
+    # exposing real USB serial devices (a host ESP32 appeared as a DUT). SYS_ADMIN
+    # alone, no host devices.
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor=unconfined
+      - systempaths=unconfined
+    cgroup: host
+    stop_signal: SIGRTMIN+3
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /run/lock
+    ports:
+      - "2222:22"
+      - "5000:5000"
