@@ -68,6 +68,7 @@ ENV CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1
 # agent reaches the rig's hardware tools through `rig-mcp-server` on PATH.
 COPY pyproject.toml /opt/rig-src/pyproject.toml
 COPY rig_mcp /opt/rig-src/rig_mcp
+COPY rig_proxy /opt/rig-src/rig_proxy
 COPY raspudger /opt/rig-src/raspudger
 RUN pip install /opt/rig-src
 

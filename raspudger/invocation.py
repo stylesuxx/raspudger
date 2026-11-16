@@ -41,12 +41,15 @@ def build_docker_command(
     credential: Credential | None,
     image: str,
     rig: RigLaunch | None = None,
+    base_url: str | None = None,
+    network: str | None = None,
     project_mount: str = PROJECT_MOUNT,
     agent_home_mount: str = AGENT_HOME_MOUNT,
 ) -> DockerInvocation:
     argv = ["docker", "run", "--rm"]
-    if args.network is not None:
-        argv += ["--network", args.network]
+    effective_network = network if network is not None else args.network
+    if effective_network is not None:
+        argv += ["--network", effective_network]
 
     if args.is_interactive and adapter.needs_tty:
         argv.append("-it")
@@ -59,6 +62,12 @@ def build_docker_command(
     if credential is not None:
         argv += ["-e", credential.env_var]
         env[credential.env_var] = credential.value
+
+    if base_url is not None:
+        argv += ["-e", f"ANTHROPIC_BASE_URL={base_url}"]
+        # Keep every model request on the proxy path: without this the CLI calls
+        # api.anthropic.com directly for version, telemetry, and fast-mode checks.
+        argv += ["-e", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"]
 
     mcp_config_json: str | None = None
     if rig is not None:

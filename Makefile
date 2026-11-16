@@ -16,7 +16,7 @@ format:
 	. .venv/bin/activate && ruff format .
 
 typecheck:
-	. .venv/bin/activate && mypy raspudger rig_mcp
+	. .venv/bin/activate && mypy raspudger rig_mcp rig_proxy
 
 check: lint typecheck test
 	. .venv/bin/activate && ruff format --check .
