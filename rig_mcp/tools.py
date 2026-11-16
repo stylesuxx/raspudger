@@ -18,7 +18,34 @@ from .script_runner import (
     build_command,
     load_script,
 )
-from .transport import Transport
+from .transport import ExecResult, Transport
+
+MAX_OUTPUT_CHARS: int = 100_000
+
+
+def _cap_stream(text: str) -> tuple[str, bool]:
+    """A stream capped to ``MAX_OUTPUT_CHARS``, with an inline marker if cut.
+
+    The marker is appended to the returned text so the agent sees the output is
+    partial even if it ignores the structured ``truncated`` flag, and never
+    reasons over a truncated result as if it were complete.
+    """
+    if len(text) <= MAX_OUTPUT_CHARS:
+        return text, False
+
+    marker: str = f"\n[truncated: first {MAX_OUTPUT_CHARS} of {len(text)} characters]"
+    return text[:MAX_OUTPUT_CHARS] + marker, True
+
+
+def _exec_payload(result: ExecResult) -> dict[str, object]:
+    stdout, stdout_truncated = _cap_stream(result.stdout)
+    stderr, stderr_truncated = _cap_stream(result.stderr)
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "returncode": result.returncode,
+        "truncated": stdout_truncated or stderr_truncated,
+    }
 
 
 @dataclass
@@ -30,11 +57,7 @@ class RigTools:
 
     def pi_exec(self, command: str, timeout_s: float = 30.0) -> dict[str, object]:
         result = self.transport.exec(command, timeout_s)
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "returncode": result.returncode,
-        }
+        return _exec_payload(result)
 
     def list_scripts(self) -> dict[str, object]:
         return {"scripts": available_scripts()}
@@ -52,11 +75,7 @@ class RigTools:
 
         command = build_command(body, args or [])
         result = self.transport.exec(command, timeout_s)
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "returncode": result.returncode,
-        }
+        return _exec_payload(result)
 
     def uart_send(self, data: str) -> dict[str, object]:
         encoded = data.encode()

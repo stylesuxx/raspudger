@@ -1,14 +1,50 @@
 from collections.abc import Iterator
 from unittest.mock import Mock
 
-from rig_mcp.tools import RigTools
+from rig_mcp.tools import MAX_OUTPUT_CHARS, RigTools
 from rig_mcp.transport import ExecResult, FakeTransport
 
 
 def test_pi_exec_shapes_result() -> None:
     transport = FakeTransport(exec_results={"ls": ExecResult("a\nb", "", 0)})
     tools = RigTools(transport=transport)
-    assert tools.pi_exec("ls") == {"stdout": "a\nb", "stderr": "", "returncode": 0}
+    assert tools.pi_exec("ls") == {
+        "stdout": "a\nb",
+        "stderr": "",
+        "returncode": 0,
+        "truncated": False,
+    }
+
+
+def test_pi_exec_caps_long_stdout_and_marks_it() -> None:
+    flood = "x" * (MAX_OUTPUT_CHARS + 500)
+    transport = FakeTransport(exec_results={"dmesg": ExecResult(flood, "", 0)})
+    tools = RigTools(transport=transport)
+    result = tools.pi_exec("dmesg")
+    assert result["truncated"] is True
+    stdout = result["stdout"]
+    assert isinstance(stdout, str)
+    assert stdout.startswith("x" * MAX_OUTPUT_CHARS)
+    assert f"first {MAX_OUTPUT_CHARS} of {len(flood)} characters" in stdout
+
+
+def test_pi_exec_caps_long_stderr() -> None:
+    transport = FakeTransport(
+        exec_results={"noisy": ExecResult("", "e" * (MAX_OUTPUT_CHARS + 1), 1)}
+    )
+    tools = RigTools(transport=transport)
+    result = tools.pi_exec("noisy")
+    assert result["truncated"] is True
+    assert "truncated" in str(result["stderr"])
+
+
+def test_pi_exec_at_the_cap_is_not_truncated() -> None:
+    exact = "y" * MAX_OUTPUT_CHARS
+    transport = FakeTransport(exec_results={"ls": ExecResult(exact, "", 0)})
+    tools = RigTools(transport=transport)
+    result = tools.pi_exec("ls")
+    assert result["truncated"] is False
+    assert result["stdout"] == exact
 
 
 def test_uart_send_counts_bytes() -> None:
