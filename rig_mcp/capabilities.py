@@ -41,11 +41,13 @@ class DeclaredInterface:
 def declared_interfaces(config: RigConfig) -> list[DeclaredInterface]:
     """The static wiring the host config declares for this bench.
 
-    Both interfaces are always present because the config requires their pins;
-    the declaration carries the wiring detail so the agent and the discrepancy
-    check can reason about it.
+    UART and power are always present because the config requires their pins. A
+    network interface is declared when a test network is configured, so the agent
+    sees it is a channel it can place a DUT onto. The declaration carries the
+    detail so the agent and the discrepancy check can reason about it; the test
+    network's PSK stays out of it and is served by ``dut_network_info``.
     """
-    return [
+    interfaces: list[DeclaredInterface] = [
         DeclaredInterface(
             "uart",
             {
@@ -62,6 +64,19 @@ def declared_interfaces(config: RigConfig) -> list[DeclaredInterface]:
             },
         ),
     ]
+
+    if config.dut_network is not None:
+        interfaces.append(
+            DeclaredInterface(
+                "network",
+                {
+                    "ssid": config.dut_network.ssid,
+                    "subnet": config.dut_network.subnet,
+                },
+            )
+        )
+
+    return interfaces
 
 
 def parse_serial_devices(stdout: str) -> list[str]:

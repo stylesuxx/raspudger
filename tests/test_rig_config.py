@@ -84,3 +84,40 @@ def test_unparseable_bool_raises() -> None:
     env = minimal_env() | {"RIG_POWER_ACTIVE_HIGH": "maybe"}
     with pytest.raises(RigConfigError, match="RIG_POWER_ACTIVE_HIGH"):
         RigConfig.from_env(env)
+
+
+def test_no_dut_network_when_ssid_absent() -> None:
+    config = RigConfig.from_env(minimal_env())
+    assert config.dut_network is None
+
+
+def test_dut_network_parsed_from_env() -> None:
+    env = minimal_env() | {
+        "RIG_DUT_NET_SSID": "raspudger-test",
+        "RIG_DUT_NET_PSK": "sekret",
+        "RIG_DUT_NET_SUBNET": "192.168.10.0/24",
+        "RIG_DUT_NET_IFACE": "wlan0",
+    }
+    config = RigConfig.from_env(env)
+    assert config.dut_network is not None
+    assert config.dut_network.ssid == "raspudger-test"
+    assert config.dut_network.psk == "sekret"
+    assert config.dut_network.subnet == "192.168.10.0/24"
+    assert config.dut_network.iface == "wlan0"
+
+
+def test_dut_network_subnet_and_iface_optional() -> None:
+    env = minimal_env() | {
+        "RIG_DUT_NET_SSID": "raspudger-test",
+        "RIG_DUT_NET_PSK": "sekret",
+    }
+    config = RigConfig.from_env(env)
+    assert config.dut_network is not None
+    assert config.dut_network.subnet is None
+    assert config.dut_network.iface is None
+
+
+def test_dut_network_ssid_without_psk_raises() -> None:
+    env = minimal_env() | {"RIG_DUT_NET_SSID": "raspudger-test"}
+    with pytest.raises(RigConfigError, match="RIG_DUT_NET_PSK"):
+        RigConfig.from_env(env)
