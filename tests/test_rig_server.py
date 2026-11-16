@@ -65,6 +65,7 @@ def test_pi_exec_through_server(tmp_path: Path) -> None:
         "stdout": "a",
         "stderr": "",
         "returncode": 0,
+        "truncated": False,
     }
 
 
@@ -78,6 +79,7 @@ def test_run_script_through_server(tmp_path: Path) -> None:
         "stdout": "/dev/ttyAMA0\n",
         "stderr": "",
         "returncode": 0,
+        "truncated": False,
     }
 
 

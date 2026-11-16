@@ -53,7 +53,7 @@ def test_run_script_through_tools_execs_the_loaded_body() -> None:
     transport = FakeTransport(exec_results={body: ExecResult("/dev/ttyAMA0\n", "", 0)})
     tools = RigTools(transport=transport)
     result = tools.run_script("probe_serial")
-    assert result == {"stdout": "/dev/ttyAMA0\n", "stderr": "", "returncode": 0}
+    assert result == {"stdout": "/dev/ttyAMA0\n", "stderr": "", "returncode": 0, "truncated": False}
     assert ("exec", body) in transport.ops
 
 

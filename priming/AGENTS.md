@@ -57,6 +57,9 @@ brute-forcing a command or value, thousands of reads), use `uart_exchange`: it
 runs a batch of send/expect steps over the one owned connection in a single call,
 instead of many `uart_send`/`uart_expect` round trips or a Pi-side script. Use
 `pi_exec` scripts freely for everything that does not touch the serial line.
+Command output is capped: a result with `truncated` set is a partial view, so
+filter large output at the source (`head`, `grep`, `tail -c`) and re-run rather
+than reasoning over it as if it were complete.
 
 A DUT may also be reachable over IP (an IP camera, or a router you are already
 driving over UART), and its wired and network interfaces work together: act over
