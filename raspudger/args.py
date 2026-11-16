@@ -42,6 +42,8 @@ class Args:
     rig_host: str | None
     network: str | None
     permission_mode: str
+    model_proxy: bool
+    model_proxy_max_requests: int | None
 
     @property
     def effective_task(self) -> str | None:
@@ -126,6 +128,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Agent tool-permission mode (default: {DEFAULT_PERMISSION_MODE}). "
         "Use 'default' to approve tools interactively.",
     )
+    parser.add_argument(
+        "--no-model-proxy",
+        action="store_false",
+        dest="model_proxy",
+        help="Inject an ANTHROPIC_API_KEY straight into the agent instead of holding "
+        "it in a proxy sidecar. The subscription and browser-login paths are unaffected.",
+    )
+    parser.add_argument(
+        "--model-proxy-max-requests",
+        type=int,
+        default=None,
+        dest="model_proxy_max_requests",
+        help="Cap the number of model requests the proxy will forward in a session.",
+    )
 
     return parser
 
@@ -157,6 +173,8 @@ def parse_args(argv: Sequence[str]) -> Args:
         rig_host=namespace.rig_host,
         network=namespace.network,
         permission_mode=namespace.permission_mode,
+        model_proxy=namespace.model_proxy,
+        model_proxy_max_requests=namespace.model_proxy_max_requests,
     )
 
 

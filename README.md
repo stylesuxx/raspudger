@@ -53,33 +53,41 @@ The hardware tools: `pi_exec`, `uart_send`, `uart_expect`, `uart_exchange`,
 
 ### Three layers, the Pi stays dumb
 
-The rig is three layers: the DUT, the disposable Pi, and the clean host. The Pi
-owns physical I/O (the UART and the power relay) and runs only `sshd`, ser2net,
-and provisioning scripts, holding no durable state. All heavy lifting (firmware
-extraction, analysis, per-device state) is host-side. Keeping the Pi dumb is what
-makes it replaceable: wipe and re-flash it without losing anything. The trust
-boundary around it is covered in Security model below.
+The rig is three layers: the DUT, the "disposable" Pi, and the clean host.
+
+The Pi owns physical I/O (the UART and the power relay) and runs only `sshd`,
+ser2net, and provisioning scripts, holding no durable state. All heavy lifting
+(firmware extraction, analysis, per-device state) is host-side.
+
+Keeping the Pi dumb is what makes it replaceable: wipe and re-flash it without
+losing anything. The trust boundary around it is covered in Security model below.
+
+This is also what makes it relatively agnostic to which Pi you are using. Pi
+Zero 2W for example is enough if you just want serial access to the DUT. Go with
+a Pi 3 instead if you want to be able to easily plug in additional hardware like
+JTAG, SPI or even an Android Phone or better WiFi.
 
 ### Tool surface: guarded core plus open shell
 
-The boundary is a shell, not a schema. The agent has a general execution channel
-(`pi_exec`) and composes what it needs, so no action is ever blocked. A small set
-of typed, guarded tools covers the few actions that are dangerous or benefit from
-structure. Raw shell is the floor and is always available.
+The agent has a general execution channel (`pi_exec`) and composes what it
+needs, so no action is ever blocked. A small set of typed, guarded tools covers
+the few actions that are dangerous or benefit from structure. Raw shell is the
+floor and is always available.
 
 An action earns a typed tool when any of these holds:
 
-- it is physical or irreversible (power, reset, reflash);
-- it needs an interlock the agent could get wrong (the power-cycle UART tristate);
-- it must be atomic and distinctly logged for the audit trail;
-- it is run often enough that reliability beats flexibility;
+- it is physical or irreversible (power, reset, reflash)
+- it needs an interlock the agent could get wrong (the power-cycle UART tristate)
+- it must be atomic and distinctly logged for the audit trail
+- it is run often enough that reliability beats flexibility
 - a structured return materially helps the agent reason (a UART read as matched
-  prompt, bytes, and timeout flag rather than scraped terminal text).
+  prompt, bytes, and timeout flag rather than scraped terminal text)
 
 Everything else stays raw shell. The guarded tools do not run on the Pi; they run
 host-side in the rig MCP server, which holds the Pi SSH key and executes over the
-segmented network. The agent calls the tools and never holds the key or reaches
-the Pi directly.
+segmented network.
+
+> The agent calls the tools and never holds the key or reaches the Pi directly.
 
 ### The power-cycle interlock
 
@@ -88,11 +96,11 @@ guarded tool rather than a raw GPIO toggle. `dut_power_cycle` runs it so the age
 cannot skip a step and chase a half-booted DUT:
 
 1. tristate the UART TX so the Pi does not back-power the DUT through its I/O
-   protection diodes;
-2. cut power;
-3. wait the configured off interval;
-4. restore power;
-5. re-open the UART.
+   protection diodes
+2. cut power
+3. wait the configured off interval
+4. restore power
+5. re-open the UART
 
 The same back-power interlock applies whenever DUT power is cut.
 
@@ -100,11 +108,17 @@ The same back-power interlock applies whenever DUT power is cut.
 
 The container runs the agent's own CLI as a full session, not a custom loop. A
 per-agent adapter knows how to launch that CLI and register the rig MCP server
-with it, so swapping the adapter changes the brain and nothing else. Two
-front-end kinds sit on the same MCP tool substrate: a mature agent CLI (Claude
-Code is the reference, bringing its own tool loop, permissions, and resumable
-sessions), or a thin provider-neutral API loop for a model whose CLI cannot mount
-MCP. The rig integration is written once, against MCP.
+with it, so swapping the adapter changes the brain and nothing else.
+
+Two front-end kinds sit on the same MCP tool substrate: an agent CLI, bringing
+its own tool loop, permissions, and resumable sessions, or a thin
+provider-neutral API loop for a model whose CLI cannot mount MCP.
+
+The rig integration is written once, against MCP.
+
+Supported agents:
+
+* Claude
 
 ### Control-channel protection
 
@@ -339,6 +353,29 @@ For headless use with no browser, put one credential in a dotenv file passed wit
 - `ANTHROPIC_API_KEY`: an API key from the Anthropic Console, billed per token.
   Setting it overrides the subscription.
 
+### Model proxy for the API-key path
+
+When the credential is an `ANTHROPIC_API_KEY`, `rasp` runs a `rig-model-proxy`
+sidecar that holds the key and forwards to the Anthropic API, and points the
+agent's `ANTHROPIC_BASE_URL` at it. The real key never enters the DUT-facing
+container: the agent authenticates to the proxy with a random per-session token
+(`ANTHROPIC_AUTH_TOKEN`), and the proxy checks that token, strips it, and injects
+the real key before forwarding. The token is generated per run and held only in
+the two containers' environments, so another container that can reach the proxy
+port but cannot read the agent's environment is rejected. The agent also runs
+with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` so every request stays on the
+proxy path. The sidecar and its network are created at session start and removed
+at the end. All of this is automatic; `config.env` holds only the real key.
+
+- `--no-model-proxy` injects the key straight into the agent instead (the older
+  behavior). The subscription and browser-login paths are unaffected either way,
+  since the CLI needs those in process and they cannot be proxied out.
+- `--model-proxy-max-requests N` caps how many model requests the proxy forwards
+  in a session.
+
+The proxy runs from the agent image, so rebuild it (`make build-image`) after
+updating before using this path.
+
 ## Security model
 
 - The agent runs in a container that bounds a prompt injection from untrusted DUT
@@ -349,6 +386,11 @@ For headless use with no browser, put one credential in a dotenv file passed wit
 - The subscription login lives in the gitignored agent home mounted into the
   container; if leaked it allows subscription use as you until revoked, not
   account takeover or API billing.
+- An `ANTHROPIC_API_KEY` is held in the model proxy sidecar, not the agent. The
+  agent reaches the model through the proxy with a per-session token, so a prompt
+  injection cannot read the paid key out of the agent container; it can still
+  spend through the proxy, bounded by `--model-proxy-max-requests` (see Model
+  proxy above; `--no-model-proxy` opts out).
 - The Pi SSH key is mounted into the container for the rig MCP server. It is
   presented with `IdentitiesOnly` and verified against a dedicated known_hosts, so
   it never touches the operator's `~/.ssh`. The Pi is disposable and segmented, so
@@ -377,3 +419,6 @@ each user. Override locations with `--data-dir`, `--agent-home`, or
 
 Intended for authorized security testing: your own devices, engagements you are
 contracted for, and research on hardware you are permitted to analyze.
+
+## Contributiong
+Contribution is very welcome, feel free to open PRs.
