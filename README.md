@@ -137,6 +137,48 @@ pins, which is acceptable for known-good DUTs. For unknown or possibly hostile
 devices, a digital UART isolator (ADuM-based) protects the host behind the
 disposable Pi. One hardware UART means one DUT at a time.
 
+### Network topology
+
+A DUT often exposes several interfaces at once, and the rig drives them together.
+A router, for example, is wired to the bench over UART while also serving a web
+interface on its network. The channels work hand in hand: pull a credential or an
+exploit over UART, then exercise it against the DUT's web interface over the
+network, or confirm over UART what a network request did. The segmented test
+network is an additional channel alongside the wired ones, not a separate kind of
+DUT.
+
+To give the rig that network channel, a dedicated test router is the isolated
+backbone, off the main LAN. The Pi sits on the router's LAN over ethernet, and the
+host reaches it through a WAN-to-Pi port-forward of SSH (22) and ser2net (5000).
+The DUT joins the router's WiFi, or wires into its LAN, so the Pi and the DUT
+share one subnet: the Pi reaches the DUT's network services, while the host still
+reaches only the Pi through the forward. Everything stays off the main LAN, which
+is the isolation the security model wants.
+
+The rig must stay single-homed on the test network. A second link, for example
+the Pi still joined to the main WiFi, breaks the forward through asymmetric
+routing: the router translates an inbound connection to the Pi, but the Pi, with
+a direct route to the main LAN over its other interface, answers the client there
+instead of back through the router, so the handshake never completes while
+same-subnet access keeps working and masks the fault. Leave the Pi's only default
+route via the test router.
+
+The test network is configured in `rig.env` with `RIG_DUT_NET_SSID` and
+`RIG_DUT_NET_PSK` (optionally `RIG_DUT_NET_SUBNET` and `RIG_DUT_NET_IFACE`). The
+agent reads them from the `dut_network_info` tool to onboard a DUT, which then
+lands on the Pi's subnet; the onboarding step itself is DUT-specific. The PSK is a
+low-value credential for a disposable test network. The host container cannot
+reach the DUT subnet, so network scans run on the Pi (`nmap` installed over SSH),
+with analysis kept host-side, and a tunnel through the Pi reaches a DUT web
+interface.
+
+Router setup for the network shape: run the test router in router/NAT mode with
+its WAN on the main network and the Pi on its LAN side, not bridged as a plain
+access point (bridging puts the DUT on the main LAN and loses the isolation).
+Port-forward WAN to the Pi's LAN IP for SSH (22) and ser2net (5000), and give the
+Pi a DHCP reservation so the forward target does not drift. `RIG_PI_HOST` is then
+the router's WAN IP, or the Pi's LAN IP when the host is behind the same router.
+
 ### Scope of the core
 
 The core is UART plus a power relay. Planned but outside the core: SPI flash tap,

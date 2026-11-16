@@ -10,6 +10,7 @@ from __future__ import annotations
 from mcp.server.mcpserver import MCPServer
 
 from .capabilities import CapabilityReporter
+from .config import DutNetwork
 from .state import StateStore
 from .tools import RigTools
 
@@ -18,6 +19,7 @@ def build_server(
     tools: RigTools,
     store: StateStore,
     reporter: CapabilityReporter,
+    dut_network: DutNetwork | None = None,
     name: str = "raspudger-rig",
 ) -> MCPServer:
     app = MCPServer(name)
@@ -25,6 +27,26 @@ def build_server(
     @app.tool()
     def rig_capabilities() -> dict[str, object]:
         return reporter.report()
+
+    @app.tool()
+    def dut_network_info() -> dict[str, object]:
+        """Credentials for the isolated test network a WiFi DUT joins.
+
+        To put a DUT on the rig's network, join it to this SSID with this PSK;
+        once connected the DUT appears on the Pi's subnet and is reachable from
+        the Pi for scanning. Returns ``configured`` False when no test network is
+        set for this bench.
+        """
+        if dut_network is None:
+            return {"configured": False}
+
+        return {
+            "configured": True,
+            "ssid": dut_network.ssid,
+            "psk": dut_network.psk,
+            "subnet": dut_network.subnet,
+            "iface": dut_network.iface,
+        }
 
     @app.tool()
     def pi_exec(command: str, timeout_s: float = 30.0) -> dict[str, object]:

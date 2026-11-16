@@ -9,6 +9,7 @@ from rig_mcp.capabilities import (
     CapabilityReporter,
     DeclaredInterface,
 )
+from rig_mcp.config import DutNetwork
 from rig_mcp.server import build_server
 from rig_mcp.state import StateStore
 from rig_mcp.tools import RigTools
@@ -16,6 +17,7 @@ from rig_mcp.transport import ExecResult, FakeTransport
 
 EXPECTED_TOOLS = {
     "rig_capabilities",
+    "dut_network_info",
     "pi_exec",
     "list_scripts",
     "run_script",
@@ -29,14 +31,18 @@ EXPECTED_TOOLS = {
 }
 
 
-def _server(tmp_path: Path, transport: FakeTransport | None = None) -> MCPServer:
+def _server(
+    tmp_path: Path,
+    transport: FakeTransport | None = None,
+    dut_network: DutNetwork | None = None,
+) -> MCPServer:
     resolved = transport or FakeTransport()
     tools = RigTools(transport=resolved)
     reporter = CapabilityReporter(
         transport=resolved,
         declared=[DeclaredInterface("uart", {"tx_pin": 14})],
     )
-    return build_server(tools, StateStore(root=tmp_path), reporter)
+    return build_server(tools, StateStore(root=tmp_path), reporter, dut_network)
 
 
 def _call(app: MCPServer, name: str, arguments: dict[str, object]) -> dict[str, object]:
@@ -96,6 +102,23 @@ def test_rig_capabilities_through_server(tmp_path: Path) -> None:
     assert isinstance(detected, dict)
     assert detected["serial_devices"] == ["/dev/ttyAMA0"]
     assert payload["discrepancies"] == []
+
+
+def test_dut_network_info_unconfigured(tmp_path: Path) -> None:
+    app = _server(tmp_path)
+    assert _call(app, "dut_network_info", {}) == {"configured": False}
+
+
+def test_dut_network_info_configured(tmp_path: Path) -> None:
+    network = DutNetwork(ssid="raspudger-test", psk="sekret", subnet="192.168.10.0/24", iface=None)
+    app = _server(tmp_path, dut_network=network)
+    assert _call(app, "dut_network_info", {}) == {
+        "configured": True,
+        "ssid": "raspudger-test",
+        "psk": "sekret",
+        "subnet": "192.168.10.0/24",
+        "iface": None,
+    }
 
 
 def test_state_roundtrip_through_server(tmp_path: Path) -> None:

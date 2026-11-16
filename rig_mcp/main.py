@@ -42,7 +42,7 @@ def build_live_tools(config: RigConfig) -> tuple[RigTools, StateStore, Capabilit
 def main() -> None:
     config = RigConfig.from_env(os.environ)
     tools, store, reporter = build_live_tools(config)
-    build_server(tools, store, reporter).run("stdio")
+    build_server(tools, store, reporter, config.dut_network).run("stdio")
 
 
 if __name__ == "__main__":

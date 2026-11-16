@@ -5,9 +5,11 @@ which reads its settings from ``RIG_*`` environment variables (see
 ``rig_mcp.config``). This module turns the operator's rig config file plus a
 ``--rig-host`` override into the environment to inject and the files to mount:
 the SSH key and known_hosts are host paths the operator names, remapped to fixed
-container paths so the server inside finds them. None of the ``RIG_*`` values is
-a secret (the key's bytes are mounted, never passed as a value), so they ride on
-the container's environment.
+container paths so the server inside finds them. The SSH key's bytes are mounted,
+never passed as a value. The one credential that rides the environment is
+``RIG_DUT_NET_PSK``, the test network's WiFi passphrase, which is low-value by
+construction (a disposable test network) and is exposed to the agent for
+onboarding.
 """
 
 from __future__ import annotations

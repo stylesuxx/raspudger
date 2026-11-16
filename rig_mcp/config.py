@@ -75,6 +75,46 @@ def _optional_bool(env: Mapping[str, str], key: str, default: bool) -> bool:
     raise RigConfigError(f"{key} must be a boolean, got {raw!r}")
 
 
+def _optional_str(env: Mapping[str, str], key: str) -> str | None:
+    value: str | None = env.get(key)
+    if value is None or value == "":
+        return None
+
+    return value
+
+
+@dataclass(frozen=True)
+class DutNetwork:
+    """The isolated test network a WiFi-client DUT joins to reach the rig.
+
+    The rig and the DUT share this subnet, so once a DUT joins it is reachable
+    from the Pi for scanning. The PSK is a low-value credential for a disposable
+    test network; it is exposed to the agent for onboarding.
+    """
+
+    ssid: str
+    psk: str
+    subnet: str | None
+    iface: str | None
+
+
+def _parse_dut_network(env: Mapping[str, str]) -> DutNetwork | None:
+    ssid: str | None = _optional_str(env, "RIG_DUT_NET_SSID")
+    if ssid is None:
+        return None
+
+    psk: str | None = _optional_str(env, "RIG_DUT_NET_PSK")
+    if psk is None:
+        raise RigConfigError("RIG_DUT_NET_PSK is required when RIG_DUT_NET_SSID is set")
+
+    return DutNetwork(
+        ssid=ssid,
+        psk=psk,
+        subnet=_optional_str(env, "RIG_DUT_NET_SUBNET"),
+        iface=_optional_str(env, "RIG_DUT_NET_IFACE"),
+    )
+
+
 @dataclass(frozen=True)
 class RigConfig:
     pi_host: str
@@ -87,6 +127,7 @@ class RigConfig:
     pins: PinMap
     state_root: Path
     uart_read_timeout: float
+    dut_network: DutNetwork | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> RigConfig:
@@ -110,4 +151,5 @@ class RigConfig:
             pins=pins,
             state_root=Path(env.get("RIG_STATE_ROOT") or "data/projects"),
             uart_read_timeout=_optional_float(env, "RIG_UART_READ_TIMEOUT", 0.1),
+            dut_network=_parse_dut_network(env),
         )
