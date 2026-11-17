@@ -19,6 +19,8 @@ import shlex
 from importlib import resources
 from importlib.resources.abc import Traversable
 
+from .paths import is_safe_path_segment
+
 SCRIPT_SUFFIX: str = ".sh"
 
 
@@ -37,7 +39,7 @@ def canonical_name(name: str) -> str:
     lookup stays inside the shipped catalog.
     """
     base: str = name[: -len(SCRIPT_SUFFIX)] if name.endswith(SCRIPT_SUFFIX) else name
-    if not base or "/" in base or "\\" in base or base.startswith("."):
+    if not is_safe_path_segment(base):
         raise ScriptNotFoundError(f"invalid script name: {name!r}")
 
     return base

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .device import DeviceRecord, derive_fingerprint
+from .paths import is_safe_path_segment
 
 _NO_DEVICE_MESSAGE = "no device is bound to this session; launch the rig with --device <slug>"
 
@@ -84,7 +85,7 @@ class StateStore:
         a capture cannot be written outside the device's workspace. The directory
         is created so the capture can stream straight to the returned path.
         """
-        if not name or name[0] == "." or "/" in name or "\\" in name:
+        if not is_safe_path_segment(name):
             raise StateError(f"invalid capture name {name!r}")
 
         path = self.root / device / "captures" / name
