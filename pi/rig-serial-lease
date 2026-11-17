@@ -26,10 +26,17 @@ while [ $# -gt 0 ]; do
 done
 command="${1:?usage: rig-serial-lease <timeout_s> [--baud N] -- <command>}"
 
-reclaim() { systemctl start ser2net >/dev/null 2>&1 || true; }
+# The lease stops ser2net, so the raw command's bytes bypass the trace a monitor
+# tails. Bracket the gap with markers in the trace so a spectator sees a labeled
+# handoff rather than silence.
+trace="${RIG_UART_TRACE:-/var/log/rig/uart.log}"
+mark() { printf '\n[rig-serial-lease %s: %s]\n' "$1" "$command" >>"$trace" 2>/dev/null || true; }
+
+reclaim() { mark end; systemctl start ser2net >/dev/null 2>&1 || true; }
 trap reclaim EXIT
 
 systemctl stop ser2net
+mark start
 if [ -n "$baud" ]; then
   stty -F "$RIG_UART_DEVICE" "$baud" || true
 fi

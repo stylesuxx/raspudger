@@ -19,6 +19,16 @@ case "$flow" in
   *) echo "unknown flow: $flow (use none|rtscts|xonxoff)" >&2; exit 2 ;;
 esac
 
+# ser2net traces both directions to one file in wire order, so a read-only
+# monitor tailing it sees the session as it happened: the host's bytes and the
+# device's replies interleaved exactly as they crossed the line. The file is
+# world-readable so the monitor can tail it as the rig user, and is appended
+# across restarts so the record survives a line reconfigure.
+trace="${RIG_UART_TRACE:-/var/log/rig/uart.log}"
+install -d -m 0755 "$(dirname "$trace")"
+touch "$trace"
+chmod 0644 "$trace"
+
 cat >/etc/ser2net.yaml <<EOF
 %YAML 1.1
 ---
@@ -27,6 +37,7 @@ connection: &dut
     enable: on
     options:
       kickolduser: true
+      trace-both: '${trace}'
     connector: serialdev,${RIG_UART_DEVICE},${mode}${options},local
 EOF
 

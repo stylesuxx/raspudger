@@ -198,6 +198,87 @@ def parse_args(argv: Sequence[str]) -> Args:
     )
 
 
+@dataclass(frozen=True)
+class MonitorArgs:
+    """Parsed invocation of the ``rasp monitor`` subcommand."""
+
+    rig_config: Path
+    rig_host: str | None
+    interactive: bool
+    device: str | None
+    project_folder: Path
+    save: Path | None
+    no_save: bool
+
+
+def build_monitor_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="rasp monitor",
+        description="Watch the rig's UART live, read-only, alongside a running session.",
+    )
+    parser.add_argument(
+        "--rig-config",
+        type=Path,
+        default=None,
+        dest="rig_config",
+        help=f"Rig connection settings file: host, SSH key (default: {DEFAULT_RIG_CONFIG}).",
+    )
+    parser.add_argument(
+        "--rig-host",
+        default=None,
+        dest="rig_host",
+        help="Pi address, overriding RIG_PI_HOST in the rig config.",
+    )
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Slug of the DUT being watched. Names the folder a saved transcript "
+        "lands in; the Pi keeps only a small rolling buffer.",
+    )
+    parser.add_argument(
+        "--project-folder",
+        type=Path,
+        default=None,
+        dest="project_folder",
+        help=f"Workspace holding per-device folders (default: {DEFAULT_PROJECT_FOLDER}).",
+    )
+    parser.add_argument(
+        "--save",
+        type=Path,
+        default=None,
+        help="Write the transcript to this file instead of the default per-device path.",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        dest="no_save",
+        help="Watch only; do not write a durable transcript to the host.",
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Take exclusive control of the serial line to type to the DUT yourself.",
+    )
+    return parser
+
+
+def parse_monitor_args(argv: Sequence[str]) -> MonitorArgs:
+    namespace = build_monitor_parser().parse_args(list(argv))
+    rig_config = namespace.rig_config if namespace.rig_config is not None else DEFAULT_RIG_CONFIG
+    project_folder = (
+        namespace.project_folder if namespace.project_folder is not None else DEFAULT_PROJECT_FOLDER
+    )
+    return MonitorArgs(
+        rig_config=rig_config,
+        rig_host=namespace.rig_host,
+        interactive=namespace.interactive,
+        device=namespace.device,
+        project_folder=project_folder,
+        save=namespace.save,
+        no_save=namespace.no_save,
+    )
+
+
 def prepare_paths(args: Args) -> None:
     """Ensure the project folder and agent home exist.
 

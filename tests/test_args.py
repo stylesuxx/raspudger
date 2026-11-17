@@ -6,8 +6,10 @@ from raspudger.args import (
     AGENT_HOME_ROOT,
     DEFAULT_CONFIG,
     DEFAULT_PROJECT_FOLDER,
+    DEFAULT_RIG_CONFIG,
     default_agent_home,
     parse_args,
+    parse_monitor_args,
     prepare_paths,
 )
 from raspudger.errors import UsageError
@@ -173,3 +175,37 @@ def test_permission_mode_defaults_to_bypass_and_overrides() -> None:
     assert parse_args(["--agent", "claude"]).permission_mode == "bypassPermissions"
     over = parse_args(["--agent", "claude", "--permission-mode", "default"])
     assert over.permission_mode == "default"
+
+
+def test_parse_monitor_defaults() -> None:
+    monitor = parse_monitor_args([])
+    assert monitor.rig_config == DEFAULT_RIG_CONFIG
+    assert monitor.rig_host is None
+    assert monitor.interactive is False
+    assert monitor.device is None
+    assert monitor.project_folder == DEFAULT_PROJECT_FOLDER
+    assert monitor.save is None
+    assert monitor.no_save is False
+
+
+def test_parse_monitor_options() -> None:
+    monitor = parse_monitor_args(
+        [
+            "--rig-config",
+            "custom.env",
+            "--rig-host",
+            "pi.local",
+            "--device",
+            "esp32",
+            "--save",
+            "out.log",
+            "--no-save",
+            "--interactive",
+        ]
+    )
+    assert monitor.rig_config == Path("custom.env")
+    assert monitor.rig_host == "pi.local"
+    assert monitor.device == "esp32"
+    assert monitor.save == Path("out.log")
+    assert monitor.no_save is True
+    assert monitor.interactive is True

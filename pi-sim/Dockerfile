@@ -38,12 +38,17 @@ COPY pi-sim/wait-for-dut-serial.sh /usr/local/bin/wait-for-dut-serial
 COPY pi/provision.sh /opt/rig/provision.sh
 COPY pi/rig-serial-config /opt/rig/rig-serial-config
 COPY pi/rig-serial-lease /opt/rig/rig-serial-lease
+COPY pi/rig-serial-monitor /opt/rig/rig-serial-monitor
+COPY pi/rig-serial-trim /opt/rig/rig-serial-trim
+COPY pi/systemd/rig-serial-trim.service /opt/rig/systemd/rig-serial-trim.service
+COPY pi/systemd/rig-serial-trim.timer /opt/rig/systemd/rig-serial-trim.timer
 COPY pi-sim/fake-dut.service /etc/systemd/system/fake-dut.service
 COPY pi-sim/rig-provision.service /etc/systemd/system/rig-provision.service
 COPY pi-sim/ser2net-wait-dut.conf /etc/systemd/system/ser2net.service.d/wait-dut.conf
 RUN chmod 0755 /usr/local/bin/pinctrl /usr/local/bin/fake-dut.py \
       /usr/local/bin/wait-for-dut-serial /opt/rig/provision.sh \
-      /opt/rig/rig-serial-config /opt/rig/rig-serial-lease \
+      /opt/rig/rig-serial-config /opt/rig/rig-serial-lease /opt/rig/rig-serial-monitor \
+      /opt/rig/rig-serial-trim \
  && : >/var/log/pinctrl.log && chmod 0666 /var/log/pinctrl.log \
  && systemctl enable ssh fake-dut.service rig-provision.service \
  && systemctl mask getty@tty1.service console-getty.service \

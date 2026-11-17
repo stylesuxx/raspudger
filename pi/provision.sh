@@ -66,12 +66,23 @@ printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$rig_user" >/etc/sudoers.d/"$rig_user"
 chmod 0440 /etc/sudoers.d/"$rig_user"
 
 echo "installing serial helpers"
-install -m 0755 "$here/rig-serial-config" "$here/rig-serial-lease" /usr/local/bin/
+install -m 0755 "$here/rig-serial-config" "$here/rig-serial-lease" \
+  "$here/rig-serial-monitor" "$here/rig-serial-trim" /usr/local/bin/
+install -m 0644 "$here/systemd/rig-serial-trim.service" "$here/systemd/rig-serial-trim.timer" \
+  /etc/systemd/system/
+install -d -m 0755 /var/log/rig
 cat >/etc/rig-serial.env <<EOF
 RIG_UART_DEVICE=$uart_device
 RIG_UART_PORT=$uart_port
 RIG_UART_BAUD=$uart_baud
+RIG_UART_TRACE=/var/log/rig/uart.log
+RIG_UART_TRACE_MAX_BYTES=2097152
 EOF
+
+# The trace files are a rolling buffer on the Pi; the durable transcript is saved
+# host-side by the monitor. This timer trims the buffer so it stays small.
+echo "enabling the UART trace trim timer"
+systemctl enable rig-serial-trim.timer
 
 echo "granting $rig_user gpio and serial access"
 usermod -aG gpio,dialout "$rig_user"

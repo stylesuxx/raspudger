@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Read-only live view of the UART. ser2net traces both directions into one file
+# in wire order; this replays the recent tail of it and follows new data. It only
+# reads the trace, never the UART, so it runs alongside the session that owns the
+# line without contending for it. tail reseeks when the trim timer truncates the
+# file, so the buffer cap does not disturb the view.
+set -uo pipefail
+
+# shellcheck disable=SC1091
+. /etc/rig-serial.env
+
+trace="${RIG_UART_TRACE:-/var/log/rig/uart.log}"
+replay_bytes="${RIG_UART_TRACE_REPLAY_BYTES:-16384}"
+
+exec tail --retry -c "$replay_bytes" -f "$trace"

@@ -1,0 +1,6 @@
+[Unit]
+Description=Trim the ser2net UART trace buffer to its size cap
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rig-serial-trim

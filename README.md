@@ -339,6 +339,36 @@ The agent runs its tools without per-call approval prompts by default
 so the prompts add friction without adding protection. Pass
 `--permission-mode default` to approve tools interactively instead.
 
+### Watching the serial
+
+Run the monitor in a second terminal to watch the UART live while a session runs:
+
+```
+./rasp monitor --rig-config rig.env --device router-a
+```
+
+It shows the session in wire order, the agent's bytes to the DUT and the DUT's
+replies interleaved exactly as they crossed the line, so it reads like a serial
+terminal (on a console that echoes, you see each command inline with its reply).
+The monitor is read-only: it tails ser2net's trace of the line over SSH and never
+writes to it, so it runs alongside a live session without contending for the
+single-owner UART. Use it to confirm the DUT is wired and talking, and to follow
+the session. Stop it with Ctrl-C; the session is unaffected.
+
+The durable transcript is saved on the host, not the Pi. With `--device`, the
+monitor writes a timestamped transcript into that device's project folder
+(`data/projects/<device>/uart-<timestamp>.log`); pass `--save <path>` to choose
+the file, or `--no-save` to watch without recording. On the Pi the trace file
+(`/var/log/rig/uart.log`) is only a small rolling buffer a monitor tails: a timer
+trims it once it passes `RIG_UART_TRACE_MAX_BYTES` (2 MB by default), so the Pi
+stays small. A session run with no monitor attached is not recorded; attach the
+monitor when you want the transcript kept.
+
+The monitor reflects what ser2net bridges. A raw handoff (`uart_handoff`, or a tool
+that leases the line) stops ser2net to take exclusive hardware control, so those
+bytes bypass the trace; the monitor shows a labeled `[rig-serial-lease ...]` marker
+around the gap rather than the raw traffic.
+
 ## Test DUT (ESP32-C3)
 
 `test-dut/` is a deliberately vulnerable UART target for exercising the rig

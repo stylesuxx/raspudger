@@ -7,6 +7,8 @@ not by unit tests.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import secrets
 import subprocess
@@ -14,14 +16,21 @@ import sys
 import time
 import uuid
 from collections.abc import Sequence
+from datetime import datetime
+from pathlib import Path
+from typing import IO
 
 from .adapters import AgentAdapter, resolve_adapter
-from .args import Args, parse_args, prepare_paths
+from .args import Args, MonitorArgs, parse_args, parse_monitor_args, prepare_paths
 from .config import load_credential
 from .errors import ReToolingError
 from .invocation import build_docker_command
+from .monitor import MonitorTarget, build_monitor_command, resolve_save_path
 from .proxy import PROXY_PORT, ProxyPlan, plan_model_proxy
 from .rig import RigLaunch, load_rig_launch
+
+MONITOR_SUBCOMMAND = "monitor"
+MONITOR_READ_SIZE = 4096
 
 DEFAULT_IMAGE = "raspudger-agent:latest"
 IMAGE_ENV_VAR = "RASPUDGER_IMAGE"
@@ -45,6 +54,9 @@ def _image_available(image: str) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] == MONITOR_SUBCOMMAND:
+        return _run_monitor(parse_monitor_args(raw[1:]))
+
     try:
         args = parse_args(raw)
         prepare_paths(args)
@@ -122,6 +134,83 @@ def _run_with_proxy(
         return completed.returncode
     finally:
         _teardown_proxy(proxy)
+
+
+def _run_monitor(monitor_args: MonitorArgs) -> int:
+    try:
+        target = MonitorTarget.from_rig_config(monitor_args.rig_config, monitor_args.rig_host)
+    except ReToolingError as exc:
+        print(f"rasp: {exc}", file=sys.stderr)
+        return 2
+
+    if monitor_args.interactive:
+        print(
+            "rasp: the interactive serial console is the next step; "
+            "the read-only monitor is available now (drop --interactive).",
+            file=sys.stderr,
+        )
+        return 2
+
+    save_path = resolve_save_path(
+        monitor_args.save,
+        monitor_args.no_save,
+        monitor_args.device,
+        monitor_args.project_folder,
+        datetime.now(),
+    )
+    if save_path is not None:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"rasp: saving transcript to {save_path}", file=sys.stderr)
+
+    print(
+        f"rasp: connecting to {target.user}@{target.host} to watch the UART ...",
+        file=sys.stderr,
+    )
+    return _stream_monitor(build_monitor_command(target), save_path)
+
+
+def _stream_monitor(argv: list[str], save_path: Path | None) -> int:
+    """Run the monitor helper over SSH, stream it to the terminal, and save it.
+
+    The helper emits the UART trace in wire order; this passes those bytes straight
+    to the terminal, and to the save file when one is set. The loop ends when the
+    helper closes its stream (the SSH channel drops) or Ctrl-C interrupts it.
+    """
+    out = sys.stdout.buffer
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE)
+    stream = process.stdout
+    # A buffered pipe: read1 returns bytes as they arrive, so a quiet console is
+    # not held back waiting to fill a fixed-size read.
+    assert isinstance(stream, io.BufferedReader)
+
+    received = 0
+    try:
+        with contextlib.ExitStack() as stack:
+            save_file: IO[bytes] | None = (
+                stack.enter_context(open(save_path, "ab")) if save_path is not None else None
+            )
+            while chunk := stream.read1(MONITOR_READ_SIZE):
+                received += len(chunk)
+                out.write(chunk)
+                out.flush()
+
+                if save_file is not None:
+                    save_file.write(chunk)
+                    save_file.flush()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        process.terminate()
+        process.wait()
+
+    if received == 0:
+        print(
+            "\nrasp: no UART data received. Check that the Pi has the latest "
+            "rig-serial-monitor and that a session is driving the UART.",
+            file=sys.stderr,
+        )
+
+    return process.returncode or 0
 
 
 def _start_proxy(proxy: ProxyPlan) -> bool:

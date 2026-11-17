@@ -22,6 +22,11 @@ from letting behaviour leak into the thin layers.
   owns the "no device bound" guard and the `StateError` -> error-payload
   translation in one place each; do not re-implement either in a tool.
 - `rig_mcp/config.py` (`RigConfig.from_env`) is pure over a mapping.
+- `raspudger/monitor.py` is the read-only serial monitor: ser2net traces both
+  directions of the line to one file in wire order, and the monitor tails it over
+  SSH, so it observes the session without owning the line and never contends with
+  the agent. Target resolution and save-path selection are pure functions tested
+  directly; the SSH subprocess and terminal writes live in `cli`.
 
 The pattern throughout is pure-core + thin-shell: parsing and logic are pure and
 unit-tested; I/O is isolated at a seam. `main.py` / `build_live_tools` is the one

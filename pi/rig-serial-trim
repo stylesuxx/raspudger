@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Keep the ser2net UART trace buffer small. The durable transcript is saved on
+# the host by the monitor; on the Pi the trace files are only a rolling buffer a
+# live monitor tails, so truncate each one once it passes its size cap. The
+# monitor reseeks when it sees the file shrink, so trimming does not disturb it.
+set -uo pipefail
+
+# shellcheck disable=SC1091
+. /etc/rig-serial.env
+
+cap="${RIG_UART_TRACE_MAX_BYTES:-2097152}"
+file="${RIG_UART_TRACE:-/var/log/rig/uart.log}"
+if [ -f "$file" ]; then
+  size="$(stat -c%s "$file" 2>/dev/null || echo 0)"
+  if [ "$size" -gt "$cap" ]; then
+    : >"$file"
+  fi
+fi
