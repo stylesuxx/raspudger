@@ -21,6 +21,20 @@ PROJECT_MOUNT = "/rig/work"
 AGENT_HOME_MOUNT = "/agent-home"
 RIG_MCP_SERVER_NAME = "rig"
 
+PIDS_LIMIT = 1024
+# Container break-out hardening applied to every session. ``no-new-privileges``
+# blocks privilege gain through setuid or file-capability binaries, so in-container
+# code stays at the unprivileged session user. The pid cap bounds the container's
+# process table, so a fork bomb stays inside it. These narrow the in-container
+# escalation surface; egress and the mounted credentials stay open by design, which
+# is the accepted trust boundary described in the README security model.
+HARDENING_FLAGS = [
+    "--security-opt",
+    "no-new-privileges",
+    "--pids-limit",
+    str(PIDS_LIMIT),
+]
+
 
 def _mcp_config_json(rig: RigLaunch, state_root: str) -> str:
     """The ``--mcp-config`` payload: one stdio server, env carried as literals.
@@ -53,6 +67,7 @@ def build_docker_command(
     agent_home_mount: str = AGENT_HOME_MOUNT,
 ) -> DockerInvocation:
     argv = ["docker", "run", "--rm"]
+    argv += HARDENING_FLAGS
     effective_network = network if network is not None else args.network
     if effective_network is not None:
         argv += ["--network", effective_network]

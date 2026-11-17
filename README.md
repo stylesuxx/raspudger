@@ -431,23 +431,37 @@ updating before using this path.
 
 ## Security model
 
-- The agent runs in a container that bounds a prompt injection from untrusted DUT
-  output to what the container can reach: the mounted project folder, the Pi SSH
-  key, and the subscription login. The container is the trust boundary; tightening
-  its egress and break-out surface, and snapshotting project state for rollback,
-  are tracked as follow-up work.
+The agent reads attacker-controlled bytes off the DUT over UART, so a prompt
+injection from that output is the threat this model addresses. The container is
+the trust boundary. Its posture is a deliberate trade: the agent keeps open
+network egress and its mounted credentials so it can research, fetch resources,
+and drive the Pi, and the container is hardened against in-container escalation
+rather than against exfiltration.
+
+- The container runs as the unprivileged `node` user (uid 1000) with
+  `--security-opt=no-new-privileges` and a `--pids-limit`, so injected code stays
+  at that user (no setuid or file-capability escalation to root) and a fork bomb
+  stays bounded to the container. These narrow break-out to the host; they do not
+  limit what the agent does inside.
+- Egress is open by design. The agent reaches the internet to look things up,
+  pull CVE data, and gather resources. A prompt injection inherits that reach: it
+  can make outbound network requests, including using the mounted login to make
+  model calls on your account. This is the accepted boundary, not a defect. If you
+  need the DUT subnet itself isolated, that is the operator's network to segment
+  (see Network topology).
 - The subscription login lives in the gitignored agent home mounted into the
-  container; if leaked it allows subscription use as you until revoked, not
-  account takeover or API billing.
+  container. If leaked it allows subscription use as you until you revoke it, not
+  account takeover or API billing. Its blast radius is bounded to your
+  subscription.
 - An `ANTHROPIC_API_KEY` is held in the model proxy sidecar, not the agent. The
   agent reaches the model through the proxy with a per-session token, so a prompt
   injection cannot read the paid key out of the agent container; it can still
   spend through the proxy, bounded by `--model-proxy-max-requests` (see Model
   proxy above; `--no-model-proxy` opts out).
-- The Pi SSH key is mounted into the container for the rig MCP server. It is
-  presented with `IdentitiesOnly` and verified against a dedicated known_hosts, so
-  it never touches the operator's `~/.ssh`. The Pi is disposable and segmented, so
-  the key is low value by construction.
+- The Pi SSH key is mounted read-only into the container for the rig MCP server.
+  It is presented with `IdentitiesOnly` and verified against a dedicated
+  known_hosts, so it never touches the operator's `~/.ssh`. Its only reach is a Pi
+  that is disposable and segmented, so the key is low value by construction.
 - The Pi must sit on a segmented network isolated from the host network.
   Everything the Pi and DUT return is treated as untrusted data; analysis happens
   on the clean host.
