@@ -56,8 +56,13 @@ RUN curl -fsSL -o /tmp/ghidra.zip "$GHIDRA_URL" \
     && rm /tmp/ghidra.zip \
     && ln -s /opt/ghidra/support/analyzeHeadless /usr/local/bin/analyzeHeadless
 
-# Agent CLI.
+# Agent CLI. The image pins the version and runs as the unprivileged node user,
+# so updates are disabled: the global npm prefix is root-owned (a self-update
+# would fail with "no write permission to npm prefix") and the container is
+# ephemeral, so rebuild the image to upgrade. DISABLE_UPDATES also blocks the
+# manual `claude update` and `claude install` paths, not just the background check.
 RUN npm install -g @anthropic-ai/claude-code@latest
+ENV DISABLE_UPDATES=1
 
 # Classic inline renderer, not the fullscreen TUI: it draws in the terminal's
 # native scrollback, which survives the container's interactive terminal instead

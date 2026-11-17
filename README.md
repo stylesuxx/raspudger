@@ -314,9 +314,16 @@ segmented network that isolates the Pi next to the untrusted DUT.
 ### Run the session
 
 ```
-./rasp --agent claude --rig-config rig.env \
+./rasp --agent claude --rig-config rig.env --device router-a \
   --task "use the rig tools to enumerate the DUT over UART"
 ```
+
+`--device` names the DUT this session works on and is required whenever a rig is
+configured. It binds per-device project state: findings and snapshots are stored
+under that slug and reload on the next session against the same device, keyed to a
+fingerprint derived from the DUT so a swapped device is flagged rather than merged.
+Only that device's directory is mounted as the session workspace, so one session
+sees and writes one device.
 
 For the sim, add `--network raspudger_default` so the container reaches `pi-sim`
 (stop it afterward with `docker compose down`). Omit `--task` for an interactive

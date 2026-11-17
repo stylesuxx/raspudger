@@ -29,9 +29,10 @@ def test_no_config_and_no_host_means_no_rig(tmp_path: Path) -> None:
 
 
 def test_full_config_builds_env_and_key_mount(tmp_path: Path) -> None:
-    launch = load_rig_launch(write_rig_config(tmp_path, FULL), None)
+    launch = load_rig_launch(write_rig_config(tmp_path, FULL), None, "router-a")
     assert launch is not None
     assert launch.env["RIG_PI_HOST"] == "pi.local"
+    assert launch.env["RIG_DEVICE"] == "router-a"
     assert launch.env["RIG_PIN_POWER"] == "17"
     assert launch.env["RIG_POWER_ACTIVE_HIGH"] == "false"
     # The host key path is remapped to the container path and mounted read-only.
@@ -43,14 +44,29 @@ def test_full_config_builds_env_and_key_mount(tmp_path: Path) -> None:
 
 
 def test_host_override_wins(tmp_path: Path) -> None:
-    launch = load_rig_launch(write_rig_config(tmp_path, FULL), "10.0.0.42")
+    launch = load_rig_launch(write_rig_config(tmp_path, FULL), "10.0.0.42", "router-a")
     assert launch is not None
     assert launch.env["RIG_PI_HOST"] == "10.0.0.42"
 
 
+def test_configured_rig_without_device_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(UsageError, match="no device"):
+        load_rig_launch(write_rig_config(tmp_path, FULL), None)
+
+
+def test_device_not_required_when_waived(tmp_path: Path) -> None:
+    launch = load_rig_launch(write_rig_config(tmp_path, FULL), None, None, require_device=False)
+    assert launch is not None
+    assert "RIG_DEVICE" not in launch.env
+
+
+def test_no_rig_does_not_demand_a_device(tmp_path: Path) -> None:
+    assert load_rig_launch(tmp_path / "absent.env", None) is None
+
+
 def test_known_hosts_is_remapped_and_writable(tmp_path: Path) -> None:
     body = FULL + "RIG_PI_KNOWN_HOSTS=/state/pi-known_hosts\n"
-    launch = load_rig_launch(write_rig_config(tmp_path, body), None)
+    launch = load_rig_launch(write_rig_config(tmp_path, body), None, "router-a")
     assert launch is not None
     assert launch.env["RIG_PI_KNOWN_HOSTS"] == CONTAINER_KNOWN_HOSTS
     kh = [m for m in launch.mounts if m.container_path == CONTAINER_KNOWN_HOSTS]
@@ -61,7 +77,7 @@ def test_known_hosts_is_remapped_and_writable(tmp_path: Path) -> None:
 
 def test_only_rig_prefixed_keys_pass_through(tmp_path: Path) -> None:
     body = FULL + "UNRELATED=secret\n"
-    launch = load_rig_launch(write_rig_config(tmp_path, body), None)
+    launch = load_rig_launch(write_rig_config(tmp_path, body), None, "router-a")
     assert launch is not None
     assert "UNRELATED" not in launch.env
 

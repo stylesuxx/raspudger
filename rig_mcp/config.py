@@ -127,6 +127,7 @@ class RigConfig:
     pins: PinMap
     state_root: Path
     uart_read_timeout: float
+    device: str | None
     dut_network: DutNetwork | None
 
     @classmethod
@@ -151,5 +152,6 @@ class RigConfig:
             pins=pins,
             state_root=Path(env.get("RIG_STATE_ROOT") or "data/projects"),
             uart_read_timeout=_optional_float(env, "RIG_UART_READ_TIMEOUT", 0.1),
+            device=_optional_str(env, "RIG_DEVICE"),
             dut_network=_parse_dut_network(env),
         )

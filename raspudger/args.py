@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import UsageError
+
+# A device slug names a directory and a container mount path, so it is held to a
+# safe charset with no separators or leading dot.
+_DEVICE_SLUG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 # All user-managed runtime state lives under one directory, gitignored.
 DEFAULT_DATA_DIR = Path("data")
@@ -40,6 +45,7 @@ class Args:
     project_folder_defaulted: bool
     rig_config: Path
     rig_host: str | None
+    device: str | None
     network: str | None
     permission_mode: str
     model_proxy: bool
@@ -117,6 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pi address, overriding RIG_PI_HOST in the rig config (the volatile bit).",
     )
     parser.add_argument(
+        "--device",
+        default=None,
+        help="Slug of the DUT this session works on. Binds per-device project "
+        "state (findings, snapshots). Required when a rig is configured.",
+    )
+    parser.add_argument(
         "--network",
         default=None,
         help="Docker network for the container (e.g. the sim's compose network).",
@@ -161,6 +173,13 @@ def parse_args(argv: Sequence[str]) -> Args:
     )
     rig_config = namespace.rig_config if namespace.rig_config is not None else DEFAULT_RIG_CONFIG
 
+    device = namespace.device
+    if device is not None and _DEVICE_SLUG.fullmatch(device) is None:
+        raise UsageError(
+            f"invalid --device slug {device!r}: use letters, digits, '.', '_', '-' "
+            "and do not start with '.'"
+        )
+
     return Args(
         agent=namespace.agent,
         config=config,
@@ -171,6 +190,7 @@ def parse_args(argv: Sequence[str]) -> Args:
         project_folder_defaulted=project_folder_defaulted,
         rig_config=rig_config,
         rig_host=namespace.rig_host,
+        device=device,
         network=namespace.network,
         permission_mode=namespace.permission_mode,
         model_proxy=namespace.model_proxy,
@@ -193,6 +213,15 @@ def prepare_paths(args: Args) -> None:
         project.mkdir(parents=True, exist_ok=True)
     else:
         raise UsageError(f"project folder not found: {project}")
+
+    # The device's own directory is the mounted workspace, so create it here
+    # rather than letting Docker make a root-owned mount point.
+    if args.device is not None:
+        device_dir = project / args.device
+        if device_dir.exists() and not device_dir.is_dir():
+            raise UsageError(f"device path is not a directory: {device_dir}")
+
+        device_dir.mkdir(parents=True, exist_ok=True)
 
     home = args.agent_home
     if home.exists() and not home.is_dir():

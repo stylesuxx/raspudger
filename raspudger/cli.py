@@ -50,7 +50,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         prepare_paths(args)
         adapter = resolve_adapter(args.agent)
         credential = load_credential(args.config, adapter.auth_env_vars)
-        rig = load_rig_launch(args.rig_config, args.rig_host)
+        rig = load_rig_launch(
+            args.rig_config, args.rig_host, args.device, require_device=not args.login
+        )
     except ReToolingError as exc:
         print(f"rasp: {exc}", file=sys.stderr)
         return 2

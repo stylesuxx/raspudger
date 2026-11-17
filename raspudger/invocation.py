@@ -22,9 +22,15 @@ AGENT_HOME_MOUNT = "/agent-home"
 RIG_MCP_SERVER_NAME = "rig"
 
 
-def _mcp_config_json(rig: RigLaunch) -> str:
-    """The ``--mcp-config`` payload: one stdio server, env carried as literals."""
-    server = {"type": "stdio", "command": "rig-mcp-server", "args": [], "env": rig.env}
+def _mcp_config_json(rig: RigLaunch, state_root: str) -> str:
+    """The ``--mcp-config`` payload: one stdio server, env carried as literals.
+
+    ``RIG_STATE_ROOT`` is set to the container mount root so the server writes
+    project state into the mounted workspace; the wrapper owns this path because
+    it must agree with the volume mount, so a value in the rig config is ignored.
+    """
+    env = {**rig.env, "RIG_STATE_ROOT": state_root}
+    server = {"type": "stdio", "command": "rig-mcp-server", "args": [], "env": env}
     return json.dumps({"mcpServers": {RIG_MCP_SERVER_NAME: server}})
 
 
@@ -78,10 +84,19 @@ def build_docker_command(
 
             argv += ["-v", spec]
 
-        mcp_config_json = _mcp_config_json(rig)
+        mcp_config_json = _mcp_config_json(rig, state_root=project_mount)
 
-    argv += ["-v", f"{args.project_folder.resolve()}:{project_mount}"]
-    argv += ["-w", project_mount]
+    # A bound device mounts only that device's directory as the workspace, so the
+    # session sees and writes one device; state lands at <project_mount>/<device>.
+    if args.device is not None:
+        work_host = args.project_folder.resolve() / args.device
+        work_mount = f"{project_mount}/{args.device}"
+    else:
+        work_host = args.project_folder.resolve()
+        work_mount = project_mount
+
+    argv += ["-v", f"{work_host}:{work_mount}"]
+    argv += ["-w", work_mount]
     argv.append(image)
     argv += adapter.launch_command(
         args.effective_task,
