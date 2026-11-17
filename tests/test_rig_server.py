@@ -24,6 +24,9 @@ EXPECTED_TOOLS = {
     "uart_send",
     "uart_expect",
     "uart_exchange",
+    "uart_capture",
+    "uart_configure",
+    "uart_handoff",
     "dut_power",
     "dut_power_cycle",
     "state_get",
@@ -166,4 +169,19 @@ def test_state_roundtrip_through_server(tmp_path: Path) -> None:
 def test_state_tools_error_without_bound_device(tmp_path: Path) -> None:
     app = _server(tmp_path, device=None)
     payload = _call(app, "state_record_finding", {"finding": {"cve": "CVE-1"}})
+    assert "no device is bound" in str(payload["error"])
+
+
+def test_uart_capture_through_server_writes_workspace_file(tmp_path: Path) -> None:
+    transport = FakeTransport(uart_chunks=[b"boot ", b"READY\n"])
+    app = _server(tmp_path, transport)
+    payload = _call(app, "uart_capture", {"out_name": "boot.txt", "until_pattern": "READY"})
+    assert payload["ended_on"] == "pattern"
+    captured = tmp_path / "router-a" / "captures" / "boot.txt"
+    assert captured.read_bytes() == b"boot READY\n"
+
+
+def test_uart_capture_requires_bound_device(tmp_path: Path) -> None:
+    app = _server(tmp_path, device=None)
+    payload = _call(app, "uart_capture", {"out_name": "boot.txt"})
     assert "no device is bound" in str(payload["error"])

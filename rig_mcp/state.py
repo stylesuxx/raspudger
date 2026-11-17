@@ -71,6 +71,20 @@ class StateStore:
 
         return {"record": record, "warnings": warnings}
 
+    def capture_path(self, device: str, name: str) -> Path:
+        """Path for a UART capture file under the device's ``captures`` directory.
+
+        The name is held to a safe charset with no separators or leading dot, so
+        a capture cannot be written outside the device's workspace. The directory
+        is created so the capture can stream straight to the returned path.
+        """
+        if not name or name[0] == "." or "/" in name or "\\" in name:
+            raise StateError(f"invalid capture name {name!r}")
+
+        path = self.root / device / "captures" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _snapshot_path(self, device: str, snapshot_id: str) -> Path:
         return self.root / device / "snapshots" / snapshot_id / "state.json"
 

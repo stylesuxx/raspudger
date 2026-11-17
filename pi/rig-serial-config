@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Rewrite the ser2net serial connector to new line settings and restart it, so
+# the rig can drive a DUT whose console is not the provisioned 115200 8N1.
+# Usage: rig-serial-config <mode> [flow]
+#   mode: a ser2net serialdev mode, e.g. 115200n81
+#   flow: none (default), rtscts, or xonxoff
+set -euo pipefail
+
+mode="${1:?usage: rig-serial-config <mode> [flow]}"
+flow="${2:-none}"
+
+# shellcheck disable=SC1091
+. /etc/rig-serial.env
+
+case "$flow" in
+  none) options="" ;;
+  rtscts) options=",rtscts" ;;
+  xonxoff) options=",xonxoff" ;;
+  *) echo "unknown flow: $flow (use none|rtscts|xonxoff)" >&2; exit 2 ;;
+esac
+
+cat >/etc/ser2net.yaml <<EOF
+%YAML 1.1
+---
+connection: &dut
+    accepter: tcp,${RIG_UART_PORT}
+    enable: on
+    options:
+      kickolduser: true
+    connector: serialdev,${RIG_UART_DEVICE},${mode}${options},local
+EOF
+
+systemctl restart ser2net

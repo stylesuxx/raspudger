@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Lease the raw serial line to a command with guaranteed reclaim.
+#
+# ser2net holds the serial device open, so a Pi-side tool cannot use it while
+# the bridge runs. This stops ser2net so the command owns the raw device, runs
+# it under a timeout, and restarts ser2net from an EXIT trap, so the line is
+# always reclaimed: on success, on failure, on timeout, or when the controlling
+# SSH connection drops and this script is killed.
+#
+# Usage: rig-serial-lease <timeout_s> [--baud <baud>] -- <command>
+#   command is a single string run with `bash -c`; RIG_UART_DEVICE and
+#   RIG_UART_BAUD are exported for it.
+set -uo pipefail
+
+# shellcheck disable=SC1091
+. /etc/rig-serial.env
+
+timeout_s=60
+baud="${RIG_UART_BAUD:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --baud) baud="${2:?--baud needs a value}"; shift 2 ;;
+    --) shift; break ;;
+    *) timeout_s="$1"; shift ;;
+  esac
+done
+command="${1:?usage: rig-serial-lease <timeout_s> [--baud N] -- <command>}"
+
+reclaim() { systemctl start ser2net >/dev/null 2>&1 || true; }
+trap reclaim EXIT
+
+systemctl stop ser2net
+if [ -n "$baud" ]; then
+  stty -F "$RIG_UART_DEVICE" "$baud" || true
+fi
+
+export RIG_UART_DEVICE
+export RIG_UART_BAUD="$baud"
+timeout "$timeout_s" bash -c "$command"

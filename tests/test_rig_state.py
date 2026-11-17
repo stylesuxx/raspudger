@@ -99,3 +99,17 @@ def test_restore_missing_snapshot_raises(tmp_path: Path) -> None:
     store = StateStore(root=tmp_path)
     with pytest.raises(StateError, match="no snapshot"):
         store.restore("dev1", "nope")
+
+
+def test_capture_path_creates_dir_and_returns_file(tmp_path: Path) -> None:
+    store = StateStore(root=tmp_path)
+    path = store.capture_path("router-a", "bootlog.txt")
+    assert path == tmp_path / "router-a" / "captures" / "bootlog.txt"
+    assert path.parent.is_dir()
+
+
+def test_capture_path_rejects_traversal(tmp_path: Path) -> None:
+    store = StateStore(root=tmp_path)
+    for bad in ("../escape", "a/b", ".hidden", ""):
+        with pytest.raises(StateError, match="invalid capture name"):
+            store.capture_path("router-a", bad)

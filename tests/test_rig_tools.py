@@ -1,8 +1,22 @@
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import Mock
 
-from rig_mcp.tools import MAX_OUTPUT_CHARS, RigTools
+from rig_mcp.tools import CAPTURE_HEAD_BYTES, MAX_OUTPUT_CHARS, RigTools
 from rig_mcp.transport import ExecResult, FakeTransport
+
+
+class FakeClock:
+    """A monotonic clock that advances a fixed step per call, for bounded loops."""
+
+    def __init__(self, step: float = 1.0) -> None:
+        self._now = 0.0
+        self._step = step
+
+    def __call__(self) -> float:
+        now = self._now
+        self._now += self._step
+        return now
 
 
 def test_pi_exec_shapes_result() -> None:
@@ -174,3 +188,87 @@ def test_uart_exchange_reports_unreachable() -> None:
     assert "error" in out
     assert "UART unreachable" in str(out["error"])
     assert out["completed"] == 0
+
+
+def test_uart_send_paces_lines_when_asked() -> None:
+    transport = FakeTransport()
+    sleep = Mock()
+    tools = RigTools(transport=transport, sleep=sleep)
+    result = tools.uart_send("a\nb\nc", line_delay_ms=10)
+    assert result == {"bytes_written": 5}
+    writes = [op for op in transport.ops if op[0] == "uart_write"]
+    assert writes == [("uart_write", b"a\n"), ("uart_write", b"b\n"), ("uart_write", b"c")]
+    assert sleep.call_count == 2
+
+
+def test_uart_send_without_pacing_is_one_write() -> None:
+    transport = FakeTransport()
+    sleep = Mock()
+    tools = RigTools(transport=transport, sleep=sleep)
+    tools.uart_send("a\nb\nc")
+    writes = [op for op in transport.ops if op[0] == "uart_write"]
+    assert writes == [("uart_write", b"a\nb\nc")]
+    assert sleep.call_count == 0
+
+
+def test_uart_capture_streams_to_file_until_pattern(tmp_path: Path) -> None:
+    transport = FakeTransport(uart_chunks=[b"load ", b"0x0 ", b"DONE\n"])
+    tools = RigTools(transport=transport)
+    out = tmp_path / "cap.bin"
+    result = tools.uart_capture(out, trigger="dump\n", until_pattern="DONE")
+    assert result["ended_on"] == "pattern"
+    assert result["bytes"] == len(b"load 0x0 DONE\n")
+    assert out.read_bytes() == b"load 0x0 DONE\n"
+    assert str(result["head"]).startswith("load ")
+    assert ("uart_write", b"dump\n") in transport.ops
+
+
+def test_uart_capture_times_out_without_pattern(tmp_path: Path) -> None:
+    transport = FakeTransport(uart_chunks=[b"noise"])
+    tools = RigTools(transport=transport, clock=FakeClock(step=1.0))
+    out = tmp_path / "cap.bin"
+    result = tools.uart_capture(out, until_pattern="NOPE", timeout_s=5.0)
+    assert result["ended_on"] == "timeout"
+    assert out.read_bytes() == b"noise"
+
+
+def test_uart_capture_stops_on_idle(tmp_path: Path) -> None:
+    transport = FakeTransport(uart_chunks=[b"data"])
+    tools = RigTools(transport=transport, clock=FakeClock(step=1.0))
+    out = tmp_path / "cap.bin"
+    result = tools.uart_capture(out, timeout_s=100.0, idle_timeout_s=2.0)
+    assert result["ended_on"] == "idle"
+    assert out.read_bytes() == b"data"
+
+
+def test_uart_capture_head_is_bounded(tmp_path: Path) -> None:
+    transport = FakeTransport(uart_chunks=[b"x" * (CAPTURE_HEAD_BYTES + 500), b"END"])
+    tools = RigTools(transport=transport)
+    out = tmp_path / "cap.bin"
+    result = tools.uart_capture(out, until_pattern="END")
+    assert len(str(result["head"])) == CAPTURE_HEAD_BYTES
+
+
+def test_uart_configure_rewrites_and_resets() -> None:
+    transport = FakeTransport()
+    tools = RigTools(transport=transport)
+    result = tools.uart_configure("57600n81", flow="rtscts")
+    assert result["mode"] == "57600n81"
+    assert ("exec", "sudo rig-serial-config 57600n81 rtscts") in transport.ops
+    assert ("uart_reset",) in transport.ops
+
+
+def test_uart_handoff_leases_and_reclaims() -> None:
+    transport = FakeTransport()
+    tools = RigTools(transport=transport)
+    result = tools.uart_handoff("flashrom -r /tmp/d.bin", timeout_s=60)
+    assert result["reclaimed"] is True
+    assert ("exec", "sudo rig-serial-lease 60 -- 'flashrom -r /tmp/d.bin'") in transport.ops
+    assert ("uart_reset",) in transport.ops
+
+
+def test_uart_handoff_passes_baud() -> None:
+    transport = FakeTransport()
+    tools = RigTools(transport=transport)
+    tools.uart_handoff("sz fw.bin", timeout_s=30, baud=57600)
+    assert ("exec", "sudo rig-serial-lease 30 --baud 57600 -- 'sz fw.bin'") in transport.ops

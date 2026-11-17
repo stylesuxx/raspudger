@@ -74,6 +74,11 @@ class SshTransport:
             with contextlib.suppress(OSError):
                 closer()
 
+    def uart_reset(self) -> None:
+        # Public reset: callers that restart ser2net (a lease or a reconfigure)
+        # drop the stale socket so the next UART use reconnects deterministically.
+        self._reset_uart()
+
     def uart_write(self, data: bytes) -> None:
         for attempt in (0, 1):
             try:

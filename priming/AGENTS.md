@@ -59,15 +59,30 @@ for example joining a network the DUT spawns, through `NetworkManager`,
 interface and its route. If a task seems to require touching the control path,
 stop and ask instead of risking it.
 
-The UART is a single-owner channel. ser2net on the Pi bridges one TCP connection
-to the one serial device, and the rig tools hold that connection for the whole
-session. Do not open the serial device or the ser2net port from a `pi_exec`
-script to drive the UART: a second client collides with the rig's connection and
-corrupts both streams. For high-volume UART work (sweeping an address space,
-brute-forcing a command or value, thousands of reads), use `uart_exchange`: it
-runs a batch of send/expect steps over the one owned connection in a single call,
-instead of many `uart_send`/`uart_expect` round trips or a Pi-side script. Use
-`pi_exec` scripts freely for everything that does not touch the serial line.
+The UART is a single-owner line: ser2net on the Pi bridges one TCP connection to
+the one serial device, and the rig owns it for the session. Never open the serial
+device or the ser2net port from a `pi_exec` script to drive the UART; a second
+client collides with the rig's connection and corrupts both streams. You are not
+limited by that rule, the rig tools give you full control of the line through
+sanctioned paths, and `uart_handoff` is the catch-all when a tool does not cover
+what you need:
+
+- Interactive work: `uart_send`, `uart_expect`, `uart_exchange`. A bare line has
+  no flow control, so for a multi-line paste or script pass `line_delay_ms` to
+  pace the send and avoid dropped characters, or drive it as expect-the-prompt
+  steps in `uart_exchange`.
+- Bulk reads (boot logs, memory or flash dumps): `uart_capture`. It streams to a
+  file in the device workspace and returns only a short head plus the path, so
+  large output never floods your context or trips the output cap. Do not read a
+  dump through the interactive tools and chunk it under the cap; capture it.
+- Line settings: `uart_configure` for a DUT whose console is not 115200 8N1 (pass
+  the ser2net mode, e.g. `57600n81`, before interacting).
+- Anything else serial: `uart_handoff` runs a Pi-side command with exclusive
+  ownership of the raw device (`$RIG_UART_DEVICE`) and always reclaims the line.
+  Use it for a transfer protocol (`sz`/`rx`), a flasher (`flashrom`), or a custom
+  script; have the command write to a Pi-side file you then pull with `pi_exec`.
+
+Use `pi_exec` scripts freely for everything that does not touch the serial line.
 Command output is capped: a result with `truncated` set is a partial view, so
 filter large output at the source (`head`, `grep`, `tail -c`) and re-run rather
 than reasoning over it as if it were complete.

@@ -286,14 +286,18 @@ segmented network that isolates the Pi next to the untrusted DUT.
 3. Wire the DUT: UART TX/RX/GND to the Pi UART pins (GPIO14/GPIO15/GND), and the
    relay coil to the power pin (default BCM 17) with the DUT power on the relay's
    NO/COM.
-4. Boot the Pi on the segmented network, then provision it:
+4. Boot the Pi on the segmented network, then provision it. Copy the whole `pi/`
+   directory, provision.sh installs the serial helper scripts that sit beside it:
    ```
-   scp pi/provision.sh rig@raspudger-001.local:/tmp/
-   ssh rig@raspudger-001.local 'sudo /tmp/provision.sh && sudo reboot'
+   scp -r pi rig@raspudger-001.local:/tmp/
+   ssh rig@raspudger-001.local 'sudo /tmp/pi/provision.sh && sudo reboot'
    ```
    This frees the PL011 UART from Bluetooth, disables the serial login console,
-   installs ser2net on `/dev/serial0`, and grants the `rig` user GPIO and serial
-   access. The reboot applies the firmware UART change.
+   installs ser2net on `/dev/serial0`, installs the `rig-serial-config` and
+   `rig-serial-lease` helpers, and grants the `rig` user GPIO, serial access, and
+   passwordless sudo. The reboot applies the firmware UART change. Re-running
+   provision.sh is safe and is how you roll out later Pi-side changes (no reboot
+   needed when only the helpers or ser2net config changed).
 5. Write `rig.env`:
    ```
    RIG_PI_HOST=raspudger-001.local

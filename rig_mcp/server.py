@@ -66,8 +66,8 @@ def build_server(
         return tools.run_script(name, args, timeout_s)
 
     @app.tool()
-    def uart_send(data: str) -> dict[str, object]:
-        return tools.uart_send(data)
+    def uart_send(data: str, line_delay_ms: int = 0) -> dict[str, object]:
+        return tools.uart_send(data, line_delay_ms)
 
     @app.tool()
     def uart_expect(pattern: str, timeout_s: float) -> dict[str, object]:
@@ -75,9 +75,60 @@ def build_server(
 
     @app.tool()
     def uart_exchange(
-        steps: list[dict[str, object]], default_timeout_s: float = 1.0
+        steps: list[dict[str, object]],
+        default_timeout_s: float = 1.0,
+        line_delay_ms: int = 0,
     ) -> dict[str, object]:
-        return tools.uart_exchange(steps, default_timeout_s)
+        return tools.uart_exchange(steps, default_timeout_s, line_delay_ms)
+
+    @app.tool()
+    def uart_capture(
+        out_name: str,
+        trigger: str = "",
+        until_pattern: str | None = None,
+        timeout_s: float = 30.0,
+        idle_timeout_s: float | None = None,
+    ) -> dict[str, object]:
+        """Stream UART output to a file in the device workspace.
+
+        Use this for bulk reads (boot logs, memory or flash dumps) instead of
+        reading through the interactive tools: the capture lands on disk and only
+        a short ``head`` plus the file path come back, so large output never
+        floods the agent's context or trips the output cap.
+        """
+        if device is None:
+            return {"error": _NO_DEVICE_ERROR}
+
+        try:
+            path = store.capture_path(device, out_name)
+        except StateError as error:
+            return {"error": str(error)}
+
+        return tools.uart_capture(path, trigger, until_pattern, timeout_s, idle_timeout_s)
+
+    @app.tool()
+    def uart_configure(mode: str, flow: str = "none") -> dict[str, object]:
+        """Set the persistent serial line settings for the interactive tools.
+
+        ``mode`` is a ser2net serialdev mode such as ``115200n81`` or ``57600e71``,
+        for a DUT whose console is not 115200 8N1. ``flow`` is none, rtscts, or
+        xonxoff. The setting persists until changed again.
+        """
+        return tools.uart_configure(mode, flow)
+
+    @app.tool()
+    def uart_handoff(
+        command: str, timeout_s: float = 120.0, baud: int | None = None
+    ) -> dict[str, object]:
+        """Run a Pi-side command with exclusive ownership of the raw serial line.
+
+        The escape hatch for serial tools the rig does not model directly
+        (``sz``/``rx``, ``flashrom``, a custom script): ser2net is stopped so the
+        command owns ``$RIG_UART_DEVICE``, then restarted so the line is always
+        reclaimed. The command may write its output to a Pi-side file you then
+        pull with ``pi_exec``.
+        """
+        return tools.uart_handoff(command, timeout_s, baud)
 
     @app.tool()
     def dut_power(state: str) -> dict[str, object]:

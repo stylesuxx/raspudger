@@ -15,6 +15,7 @@ rig_user="${RIG_USER:-rig}"
 uart_port="${RIG_UART_PORT:-5000}"
 uart_device="${RIG_UART_DEVICE:-/dev/serial0}"
 uart_baud="${RIG_UART_BAUD:-115200}"
+here="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "provision.sh must run as root (use sudo)" >&2
@@ -36,10 +37,12 @@ ensure_config_line() {
   fi
 }
 
-echo "installing ser2net"
+echo "installing ser2net and locales"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ser2net
+# locales-all so a locale an SSH client forwards (LC_*/LANG) always resolves,
+# instead of the "invalid locale" warning and degraded UTF-8 handling.
+apt-get install -y -qq ser2net locales-all
 
 echo "freeing the UART in $config_txt"
 touch "$config_txt"
@@ -54,24 +57,29 @@ fi
 systemctl disable --now serial-getty@ttyAMA0.service 2>/dev/null || true
 systemctl disable --now serial-getty@serial0.service 2>/dev/null || true
 
-echo "writing /etc/ser2net.yaml"
-cat >/etc/ser2net.yaml <<EOF
-%YAML 1.1
----
-connection: &dut
-    accepter: tcp,$uart_port
-    enable: on
-    options:
-      kickolduser: true
-    connector: serialdev,$uart_device,${uart_baud}n81,local
+echo "granting $rig_user passwordless sudo"
+# The agent drives the Pi as $rig_user over SSH and needs full control: install
+# packages, manage services, open raw devices, lease the serial line. Pi Imager
+# gives the first user sudo; this makes it passwordless so the agent never stalls
+# on a prompt.
+printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$rig_user" >/etc/sudoers.d/"$rig_user"
+chmod 0440 /etc/sudoers.d/"$rig_user"
+
+echo "installing serial helpers"
+install -m 0755 "$here/rig-serial-config" "$here/rig-serial-lease" /usr/local/bin/
+cat >/etc/rig-serial.env <<EOF
+RIG_UART_DEVICE=$uart_device
+RIG_UART_PORT=$uart_port
+RIG_UART_BAUD=$uart_baud
 EOF
 
 echo "granting $rig_user gpio and serial access"
 usermod -aG gpio,dialout "$rig_user"
 
-# restart, not just start: the package may already be running with its default
-# config, so the freshly written one loads only on a restart.
+# rig-serial-config writes /etc/ser2net.yaml from the line settings and restarts
+# the bridge; enable it so it also comes up on boot.
+echo "writing /etc/ser2net.yaml and starting ser2net"
 systemctl enable ser2net
-systemctl restart ser2net
+rig-serial-config "${uart_baud}n81"
 
 echo "provisioned. reboot to apply the UART firmware changes: sudo reboot"
