@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Exclusive interactive serial console on the rig. Leases the raw line so ser2net
+# steps aside and the agent's UART tools pause, then runs a terminal on the device;
+# ser2net resumes when the terminal exits or the connection drops. Run this over
+# 'ssh -t' so the terminal has a controlling PTY. Exit picocom with Ctrl-A Ctrl-X.
+# Usage: rig-serial-console [baud]
+set -uo pipefail
+
+# shellcheck disable=SC1091
+. /etc/rig-serial.env
+
+baud="${1:-${RIG_UART_BAUD:-115200}}"
+timeout_s="${RIG_CONSOLE_TIMEOUT_S:-3600}"
+
+# -c enables local echo, so typed characters are visible even when the DUT
+# firmware does not echo its input. --omap crcrlf sends CR+LF for each Enter,
+# which the DUT console treats as a line terminator (a bare CR often does not).
+exec rig-serial-lease "$timeout_s" --baud "$baud" -- "picocom -b $baud -c --omap crcrlf -q $RIG_UART_DEVICE"

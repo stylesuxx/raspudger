@@ -22,6 +22,7 @@ from .config import parse_env_file
 from .errors import UsageError
 
 MONITOR_HELPER = "rig-serial-monitor"
+CONSOLE_HELPER = "rig-serial-console"
 
 
 @dataclass(frozen=True)
@@ -72,15 +73,19 @@ class MonitorTarget:
         )
 
 
-def build_monitor_command(target: MonitorTarget) -> list[str]:
-    """The ssh argv that runs the read-only monitor helper on the Pi.
+def _ssh_base(target: MonitorTarget, allocate_tty: bool) -> list[str]:
+    """The ssh argv up to the destination, shared by both monitor modes.
 
     Mirrors the agent's SSH options (batch mode, a dedicated known_hosts, and the
     rig key presented with IdentitiesOnly), so the monitor verifies the Pi the
-    same way and never falls back to the operator's own keys.
+    same way and never falls back to the operator's own keys. ``allocate_tty``
+    adds ``-t`` so an interactive terminal has a controlling PTY on the Pi.
     """
-    argv = [
-        "ssh",
+    argv = ["ssh"]
+    if allocate_tty:
+        argv.append("-t")
+
+    argv += [
         "-p",
         str(target.ssh_port),
         "-o",
@@ -96,7 +101,26 @@ def build_monitor_command(target: MonitorTarget) -> list[str]:
     if target.ssh_key is not None:
         argv += ["-i", str(target.ssh_key), "-o", "IdentitiesOnly=yes"]
 
-    argv += [f"{target.user}@{target.host}", "--", MONITOR_HELPER]
+    argv.append(f"{target.user}@{target.host}")
+    return argv
+
+
+def build_monitor_command(target: MonitorTarget) -> list[str]:
+    """The ssh argv that runs the read-only monitor helper on the Pi."""
+    return [*_ssh_base(target, allocate_tty=False), "--", MONITOR_HELPER]
+
+
+def build_interactive_command(target: MonitorTarget, baud: int | None) -> list[str]:
+    """The ssh argv that opens the exclusive interactive console on the Pi.
+
+    Runs the console helper under sudo so it can lease the raw line, with a TTY
+    allocated so the terminal is interactive. ``baud`` overrides the line rate for
+    this session; omit it to use the Pi's provisioned rate.
+    """
+    argv = [*_ssh_base(target, allocate_tty=True), "--", "sudo", CONSOLE_HELPER]
+    if baud is not None:
+        argv.append(str(baud))
+
     return argv
 
 

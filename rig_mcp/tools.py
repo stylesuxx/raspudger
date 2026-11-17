@@ -26,6 +26,11 @@ MAX_OUTPUT_CHARS: int = 100_000
 CAPTURE_HEAD_BYTES: int = 2_000
 _CAPTURE_MATCH_WINDOW: int = 8_192
 
+# The lease writes the command that owns the raw line here while a console or
+# handoff runs; the UART tools read it to explain an exclusive hold.
+LEASE_HOLDER_FILE: str = "/run/rig/serial.lease"
+HOLDER_READ_TIMEOUT_S: float = 5.0
+
 
 def _cap_stream(text: str) -> tuple[str, bool]:
     """A stream capped to ``MAX_OUTPUT_CHARS``, with an inline marker if cut.
@@ -58,6 +63,27 @@ class RigTools:
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     read_timeout: float = 0.1
+
+    def _uart_unreachable_message(self, error: OSError) -> str:
+        """Explain an unreachable UART, naming an interactive hold when one exists.
+
+        While an interactive console leases the raw line, ser2net is stopped and
+        the UART socket is refused. The lease records its command in a holder file,
+        so a user-held line is reported as held rather than as a bridge fault.
+        """
+        holder = self._lease_holder()
+        if holder is not None:
+            return (
+                f"serial line is held by an interactive console (running: {holder}). "
+                "It has exclusive control of the line until the console is closed."
+            )
+
+        return f"UART unreachable: {error}"
+
+    def _lease_holder(self) -> str | None:
+        result = self.transport.exec(f"cat {LEASE_HOLDER_FILE} 2>/dev/null", HOLDER_READ_TIMEOUT_S)
+        holder = result.stdout.strip()
+        return holder or None
 
     def pi_exec(self, command: str, timeout_s: float = 30.0) -> dict[str, object]:
         result = self.transport.exec(command, timeout_s)
@@ -92,7 +118,7 @@ class RigTools:
         try:
             self._uart_write_paced(encoded, line_delay_ms)
         except OSError as error:
-            return {"bytes_written": 0, "error": f"UART unreachable: {error}"}
+            return {"bytes_written": 0, "error": self._uart_unreachable_message(error)}
 
         return {"bytes_written": len(encoded)}
 
@@ -120,7 +146,7 @@ class RigTools:
                     "matched": False,
                     "data": buffer.decode(errors="replace"),
                     "matched_text": None,
-                    "error": f"UART unreachable: {error}",
+                    "error": self._uart_unreachable_message(error),
                 }
 
         found = matcher.search(buffer)
@@ -157,7 +183,7 @@ class RigTools:
                     return {
                         "results": results,
                         "completed": len(results),
-                        "error": f"UART unreachable: {error}",
+                        "error": self._uart_unreachable_message(error),
                     }
 
             expect_value = step.get("expect")
@@ -190,7 +216,7 @@ class RigTools:
                     return {
                         "results": results,
                         "completed": len(results),
-                        "error": f"UART unreachable: {error}",
+                        "error": self._uart_unreachable_message(error),
                     }
 
             found = matcher.search(buffer)
@@ -238,7 +264,7 @@ class RigTools:
                         "bytes": 0,
                         "head": "",
                         "ended_on": "error",
-                        "error": f"UART unreachable: {error}",
+                        "error": self._uart_unreachable_message(error),
                     }
 
             while self.clock() < deadline:
@@ -250,7 +276,7 @@ class RigTools:
                         "bytes": total,
                         "head": head.decode(errors="replace"),
                         "ended_on": "error",
-                        "error": f"UART unreachable: {error}",
+                        "error": self._uart_unreachable_message(error),
                     }
 
                 if chunk:

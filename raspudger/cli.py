@@ -25,7 +25,12 @@ from .args import Args, MonitorArgs, parse_args, parse_monitor_args, prepare_pat
 from .config import load_credential
 from .errors import ReToolingError
 from .invocation import build_docker_command
-from .monitor import MonitorTarget, build_monitor_command, resolve_save_path
+from .monitor import (
+    MonitorTarget,
+    build_interactive_command,
+    build_monitor_command,
+    resolve_save_path,
+)
 from .proxy import PROXY_PORT, ProxyPlan, plan_model_proxy
 from .rig import RigLaunch, load_rig_launch
 
@@ -144,12 +149,7 @@ def _run_monitor(monitor_args: MonitorArgs) -> int:
         return 2
 
     if monitor_args.interactive:
-        print(
-            "rasp: the interactive serial console is the next step; "
-            "the read-only monitor is available now (drop --interactive).",
-            file=sys.stderr,
-        )
-        return 2
+        return _run_interactive(target, monitor_args.baud)
 
     save_path = resolve_save_path(
         monitor_args.save,
@@ -167,6 +167,24 @@ def _run_monitor(monitor_args: MonitorArgs) -> int:
         file=sys.stderr,
     )
     return _stream_monitor(build_monitor_command(target), save_path)
+
+
+def _run_interactive(target: MonitorTarget, baud: int | None) -> int:
+    """Open the exclusive interactive console, inheriting the terminal.
+
+    ssh runs with a PTY and the terminal is handed straight to the Pi-side
+    console, so keystrokes reach the DUT. ser2net is stopped for the duration, so
+    the agent's UART tools pause until the console exits.
+    """
+    print(
+        "rasp: taking exclusive control of the serial line. ser2net stops and the "
+        "agent's UART tools pause until you exit.",
+        file=sys.stderr,
+    )
+    print("rasp: exit the console with Ctrl-A Ctrl-X.", file=sys.stderr)
+    completed = subprocess.run(build_interactive_command(target, baud), check=False)
+    print("rasp: console closed; ser2net resumes.", file=sys.stderr)
+    return completed.returncode
 
 
 def _stream_monitor(argv: list[str], save_path: Path | None) -> int:

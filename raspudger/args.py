@@ -205,6 +205,7 @@ class MonitorArgs:
     rig_config: Path
     rig_host: str | None
     interactive: bool
+    baud: int | None
     device: str | None
     project_folder: Path
     save: Path | None
@@ -259,6 +260,12 @@ def build_monitor_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Take exclusive control of the serial line to type to the DUT yourself.",
     )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=None,
+        help="Line rate for the interactive console (default: the provisioned rate).",
+    )
     return parser
 
 
@@ -272,6 +279,7 @@ def parse_monitor_args(argv: Sequence[str]) -> MonitorArgs:
         rig_config=rig_config,
         rig_host=namespace.rig_host,
         interactive=namespace.interactive,
+        baud=namespace.baud,
         device=namespace.device,
         project_folder=project_folder,
         save=namespace.save,

@@ -32,9 +32,17 @@ command="${1:?usage: rig-serial-lease <timeout_s> [--baud N] -- <command>}"
 trace="${RIG_UART_TRACE:-/var/log/rig/uart.log}"
 mark() { printf '\n[rig-serial-lease %s: %s]\n' "$1" "$command" >>"$trace" 2>/dev/null || true; }
 
-reclaim() { mark end; systemctl start ser2net >/dev/null 2>&1 || true; }
+# The holder file names the command that owns the line while the lease runs. The
+# MCP reads it when a UART call finds the bridge down, so the agent is told the
+# line is held by this console rather than seeing a bare connection failure. It
+# lives on tmpfs (/run), so it clears on reboot.
+holder="${RIG_SERIAL_LEASE_FILE:-/run/rig/serial.lease}"
+
+reclaim() { rm -f "$holder" 2>/dev/null || true; mark end; systemctl start ser2net >/dev/null 2>&1 || true; }
 trap reclaim EXIT
 
+install -d -m 0755 "$(dirname "$holder")"
+printf '%s\n' "$command" >"$holder" 2>/dev/null || true
 systemctl stop ser2net
 mark start
 if [ -n "$baud" ]; then
@@ -43,4 +51,7 @@ fi
 
 export RIG_UART_DEVICE
 export RIG_UART_BAUD="$baud"
-timeout "$timeout_s" bash -c "$command"
+# --foreground keeps the command in the terminal's foreground process group, so an
+# interactive console (picocom) can read keystrokes and receive terminal signals.
+# Without it timeout puts the command in a background group that cannot read the TTY.
+timeout --foreground "$timeout_s" bash -c "$command"

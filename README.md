@@ -369,6 +369,20 @@ that leases the line) stops ser2net to take exclusive hardware control, so those
 bytes bypass the trace; the monitor shows a labeled `[rig-serial-lease ...]` marker
 around the gap rather than the raw traffic.
 
+To drive the DUT yourself, take the line with `--interactive`:
+
+```
+./rasp monitor --rig-config rig.env --interactive
+```
+
+This opens a `picocom` terminal on the Pi's raw UART over the lease mechanism:
+ser2net stops, so you have exclusive hardware control (real baud, break), and the
+agent's UART tools pause until you exit. Type to the DUT directly; exit with
+`Ctrl-A Ctrl-X`, and ser2net restarts so the agent resumes. Pass `--baud <rate>`
+to probe a line whose rate differs from the provisioned one. Because this holds the
+line exclusively, run it when you want hands-on control, not alongside an active
+agent you expect to keep working.
+
 ## Test DUT (ESP32-C3)
 
 `test-dut/` is a deliberately vulnerable UART target for exercising the rig

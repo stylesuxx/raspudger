@@ -190,6 +190,62 @@ def test_uart_exchange_reports_unreachable() -> None:
     assert out["completed"] == 0
 
 
+class HeldUart:
+    """Line held by an interactive console: sockets refused, holder file present."""
+
+    def __init__(self, holder: str) -> None:
+        self._holder = holder
+
+    def exec(self, command: str, timeout_s: float) -> ExecResult:
+        return ExecResult(f"{self._holder}\n", "", 0)
+
+    def uart_write(self, data: bytes) -> None:
+        raise ConnectionRefusedError("uart bridge down")
+
+    def uart_read(self, timeout_s: float) -> bytes:
+        raise ConnectionRefusedError("uart bridge down")
+
+    def set_power(self, on: bool) -> None:
+        return None
+
+    def set_uart_tristate(self, tristate: bool) -> None:
+        return None
+
+
+_HELD_BY = "picocom -b 115200 -c --omap crcrlf -q /dev/serial0"
+
+
+def test_uart_send_reports_interactive_hold() -> None:
+    tools = RigTools(transport=HeldUart(_HELD_BY))
+    out = tools.uart_send("id\n")
+    assert out["bytes_written"] == 0
+    error = str(out["error"])
+    assert "held by an interactive console" in error
+    assert "picocom" in error
+
+
+def test_uart_expect_reports_interactive_hold() -> None:
+    ticks: Iterator[float] = iter([0.0, 0.0])
+    tools = RigTools(transport=HeldUart(_HELD_BY), clock=lambda: next(ticks))
+    out = tools.uart_expect("x", timeout_s=5.0)
+    assert out["matched"] is False
+    assert "held by an interactive console" in str(out["error"])
+
+
+def test_uart_exchange_reports_interactive_hold() -> None:
+    tools = RigTools(transport=HeldUart(_HELD_BY))
+    out = tools.uart_exchange([{"send": "id\n", "expect": "ok"}])
+    assert out["completed"] == 0
+    assert "held by an interactive console" in str(out["error"])
+
+
+def test_uart_capture_reports_interactive_hold(tmp_path: Path) -> None:
+    tools = RigTools(transport=HeldUart(_HELD_BY))
+    out = tools.uart_capture(tmp_path / "cap.log", trigger="go\n")
+    assert out["ended_on"] == "error"
+    assert "held by an interactive console" in str(out["error"])
+
+
 def test_uart_send_paces_lines_when_asked() -> None:
     transport = FakeTransport()
     sleep = Mock()

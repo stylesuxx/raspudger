@@ -5,8 +5,10 @@ import pytest
 
 from raspudger.errors import UsageError
 from raspudger.monitor import (
+    CONSOLE_HELPER,
     MONITOR_HELPER,
     MonitorTarget,
+    build_interactive_command,
     build_monitor_command,
     resolve_save_path,
 )
@@ -91,6 +93,26 @@ def test_build_monitor_command_without_key(tmp_path: Path) -> None:
     assert "IdentitiesOnly=yes" not in argv
     assert "UserKnownHostsFile" not in " ".join(argv)
     assert argv[-3:] == ["rig@pi.local", "--", MONITOR_HELPER]
+
+
+def test_monitor_command_allocates_no_tty(tmp_path: Path) -> None:
+    target = MonitorTarget.from_rig_config(_write_config(tmp_path, RIG_CONFIG), None)
+    assert "-t" not in build_monitor_command(target)
+
+
+def test_build_interactive_command(tmp_path: Path) -> None:
+    target = MonitorTarget.from_rig_config(_write_config(tmp_path, RIG_CONFIG), None)
+    argv = build_interactive_command(target, None)
+    assert argv[0] == "ssh"
+    assert "-t" in argv  # a PTY for the terminal
+    assert "-i" in argv and str(Path("/keys/rig")) in argv
+    assert argv[-4:] == ["rig@pi.local", "--", "sudo", CONSOLE_HELPER]
+
+
+def test_interactive_command_passes_baud(tmp_path: Path) -> None:
+    target = MonitorTarget.from_rig_config(_write_config(tmp_path, RIG_CONFIG), None)
+    argv = build_interactive_command(target, 9600)
+    assert argv[-5:] == ["rig@pi.local", "--", "sudo", CONSOLE_HELPER, "9600"]
 
 
 def test_resolve_save_path_defaults_to_device_folder() -> None:

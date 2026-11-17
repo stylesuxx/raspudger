@@ -182,6 +182,7 @@ def test_parse_monitor_defaults() -> None:
     assert monitor.rig_config == DEFAULT_RIG_CONFIG
     assert monitor.rig_host is None
     assert monitor.interactive is False
+    assert monitor.baud is None
     assert monitor.device is None
     assert monitor.project_folder == DEFAULT_PROJECT_FOLDER
     assert monitor.save is None
@@ -201,6 +202,8 @@ def test_parse_monitor_options() -> None:
             "out.log",
             "--no-save",
             "--interactive",
+            "--baud",
+            "9600",
         ]
     )
     assert monitor.rig_config == Path("custom.env")
@@ -209,3 +212,4 @@ def test_parse_monitor_options() -> None:
     assert monitor.save == Path("out.log")
     assert monitor.no_save is True
     assert monitor.interactive is True
+    assert monitor.baud == 9600

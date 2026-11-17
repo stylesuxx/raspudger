@@ -15,7 +15,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       systemd systemd-sysv dbus \
       openssh-server sudo \
-      ser2net python3 \
+      ser2net python3 picocom \
       iproute2 procps ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
@@ -40,6 +40,7 @@ COPY pi/rig-serial-config /opt/rig/rig-serial-config
 COPY pi/rig-serial-lease /opt/rig/rig-serial-lease
 COPY pi/rig-serial-monitor /opt/rig/rig-serial-monitor
 COPY pi/rig-serial-trim /opt/rig/rig-serial-trim
+COPY pi/rig-serial-console /opt/rig/rig-serial-console
 COPY pi/systemd/rig-serial-trim.service /opt/rig/systemd/rig-serial-trim.service
 COPY pi/systemd/rig-serial-trim.timer /opt/rig/systemd/rig-serial-trim.timer
 COPY pi-sim/fake-dut.service /etc/systemd/system/fake-dut.service
@@ -48,7 +49,7 @@ COPY pi-sim/ser2net-wait-dut.conf /etc/systemd/system/ser2net.service.d/wait-dut
 RUN chmod 0755 /usr/local/bin/pinctrl /usr/local/bin/fake-dut.py \
       /usr/local/bin/wait-for-dut-serial /opt/rig/provision.sh \
       /opt/rig/rig-serial-config /opt/rig/rig-serial-lease /opt/rig/rig-serial-monitor \
-      /opt/rig/rig-serial-trim \
+      /opt/rig/rig-serial-trim /opt/rig/rig-serial-console \
  && : >/var/log/pinctrl.log && chmod 0666 /var/log/pinctrl.log \
  && systemctl enable ssh fake-dut.service rig-provision.service \
  && systemctl mask getty@tty1.service console-getty.service \

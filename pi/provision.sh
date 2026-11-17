@@ -37,12 +37,13 @@ ensure_config_line() {
   fi
 }
 
-echo "installing ser2net and locales"
+echo "installing ser2net, picocom, and locales"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-# locales-all so a locale an SSH client forwards (LC_*/LANG) always resolves,
-# instead of the "invalid locale" warning and degraded UTF-8 handling.
-apt-get install -y -qq ser2net locales-all
+# picocom is the terminal for the interactive serial console (rasp monitor
+# --interactive). locales-all so a locale an SSH client forwards (LC_*/LANG)
+# always resolves, instead of the "invalid locale" warning and degraded UTF-8.
+apt-get install -y -qq ser2net picocom locales-all
 
 echo "freeing the UART in $config_txt"
 touch "$config_txt"
@@ -67,7 +68,8 @@ chmod 0440 /etc/sudoers.d/"$rig_user"
 
 echo "installing serial helpers"
 install -m 0755 "$here/rig-serial-config" "$here/rig-serial-lease" \
-  "$here/rig-serial-monitor" "$here/rig-serial-trim" /usr/local/bin/
+  "$here/rig-serial-monitor" "$here/rig-serial-trim" "$here/rig-serial-console" \
+  /usr/local/bin/
 install -m 0644 "$here/systemd/rig-serial-trim.service" "$here/systemd/rig-serial-trim.timer" \
   /etc/systemd/system/
 install -d -m 0755 /var/log/rig
