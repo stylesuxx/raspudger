@@ -104,6 +104,12 @@ cannot skip a step and chase a half-booted DUT:
 
 The same back-power interlock applies whenever DUT power is cut.
 
+`dut_power` and `dut_power_cycle` are present only when a power relay is wired for
+the bench, so the agent's tool list matches the hardware. Configure the relay pin
+(`RIG_PIN_POWER`) and they appear; omit it for a bench with no relay, or pass
+`rasp --no-power` for a DUT not wired to the relay, and both tools are withheld
+and `rig_capabilities` reports no power. The UART is unaffected either way.
+
 ### Agent-agnostic front-ends on one tool substrate
 
 The container runs the agent's own CLI as a full session, not a custom loop. A

@@ -32,6 +32,25 @@ The pattern throughout is pure-core + thin-shell: parsing and logic are pure and
 unit-tested; I/O is isolated at a seam. `main.py` / `build_live_tools` is the one
 composition root that touches the real environment and network.
 
+## Pi-side serial console workarounds
+
+The interactive console (`rasp monitor --interactive`) runs picocom on the raw
+line through `rig-serial-lease`, and two flags there are load-bearing for
+non-obvious platform reasons:
+
+- `rig-serial-lease` runs the leased command under `timeout --foreground`. GNU
+  `timeout` otherwise puts the command in a background process group, which
+  cannot read the controlling terminal: an interactive console gets no keystrokes
+  and no terminal signals, and on an SSH disconnect the command misses SIGHUP,
+  orphans, and keeps the serial device open so ser2net cannot reclaim the line.
+  `--foreground` keeps it in the terminal's foreground group and fixes both.
+- `rig-serial-console` runs picocom with `--omap crcrlf`, so Enter sends CR+LF.
+  A bare CR (picocom's default) is ignored by DUT consoles that terminate a
+  command line on LF, so without it typed commands never execute. picocom also
+  runs with `-c` (local echo) because a DUT that does not echo its input leaves
+  an otherwise silent console. minicom cannot send CR+LF on Enter at all, which
+  is why the console uses picocom.
+
 ## MCP tools are registered from their implementation, not restated
 
 `rig_mcp/server.py` is a thin registration layer. A tool that is a pure

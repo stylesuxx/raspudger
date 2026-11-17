@@ -41,11 +41,13 @@ class DeclaredInterface:
 def declared_interfaces(config: RigConfig) -> list[DeclaredInterface]:
     """The static wiring the host config declares for this bench.
 
-    UART and power are always present because the config requires their pins. A
-    network interface is declared when a test network is configured, so the agent
-    sees it is a channel it can place a DUT onto. The declaration carries the
-    detail so the agent and the discrepancy check can reason about it; the test
-    network's PSK stays out of it and is served by ``dut_network_info``.
+    UART is always present because the config requires its pin. Power is declared
+    when a relay pin is configured, so a bench without the relay (or a DUT not
+    wired to it) shows no power capability. A network interface is declared when a
+    test network is configured, so the agent sees it is a channel it can place a
+    DUT onto. The declaration carries the detail so the agent and the discrepancy
+    check can reason about it; the test network's PSK stays out of it and is
+    served by ``dut_network_info``.
     """
     interfaces: list[DeclaredInterface] = [
         DeclaredInterface(
@@ -56,14 +58,18 @@ def declared_interfaces(config: RigConfig) -> list[DeclaredInterface]:
                 "port": config.uart_port,
             },
         ),
-        DeclaredInterface(
-            "power",
-            {
-                "pin": config.pins.power,
-                "active_high": config.pins.power_active_high,
-            },
-        ),
     ]
+
+    if config.has_power:
+        interfaces.append(
+            DeclaredInterface(
+                "power",
+                {
+                    "pin": config.pins.power,
+                    "active_high": config.pins.power_active_high,
+                },
+            )
+        )
 
     if config.dut_network is not None:
         interfaces.append(

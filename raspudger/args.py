@@ -47,6 +47,7 @@ class Args:
     rig_host: str | None
     device: str | None
     network: str | None
+    no_power: bool
     permission_mode: str
     model_proxy: bool
     model_proxy_max_requests: int | None
@@ -134,6 +135,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Docker network for the container (e.g. the sim's compose network).",
     )
     parser.add_argument(
+        "--no-power",
+        action="store_true",
+        dest="no_power",
+        help="Suppress the DUT power tools for this session, for a DUT that is not "
+        "wired to the power relay. A bench with no relay omits the pin instead.",
+    )
+    parser.add_argument(
         "--permission-mode",
         default=DEFAULT_PERMISSION_MODE,
         dest="permission_mode",
@@ -192,6 +200,7 @@ def parse_args(argv: Sequence[str]) -> Args:
         rig_host=namespace.rig_host,
         device=device,
         network=namespace.network,
+        no_power=namespace.no_power,
         permission_mode=namespace.permission_mode,
         model_proxy=namespace.model_proxy,
         model_proxy_max_requests=namespace.model_proxy_max_requests,

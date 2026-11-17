@@ -27,6 +27,7 @@ def test_from_env_applies_defaults() -> None:
     assert config.pins.power == 17
     assert config.pins.uart_tx == 14
     assert config.pins.power_active_high is True
+    assert config.has_power is True
     assert config.state_root == Path("data/projects")
     assert config.uart_read_timeout == 0.1
     assert config.device is None
@@ -66,12 +67,20 @@ def test_uart_host_defaults_to_pi_host() -> None:
     assert config.uart_host == config.pi_host
 
 
-@pytest.mark.parametrize("missing", ["RIG_PI_HOST", "RIG_PIN_POWER", "RIG_PIN_UART_TX"])
+@pytest.mark.parametrize("missing", ["RIG_PI_HOST", "RIG_PIN_UART_TX"])
 def test_missing_required_setting_raises(missing: str) -> None:
     env = minimal_env()
     del env[missing]
     with pytest.raises(RigConfigError, match=missing):
         RigConfig.from_env(env)
+
+
+def test_power_pin_optional_means_no_power() -> None:
+    env = minimal_env()
+    del env["RIG_PIN_POWER"]
+    config = RigConfig.from_env(env)
+    assert config.pins.power is None
+    assert config.has_power is False
 
 
 def test_empty_required_setting_raises() -> None:

@@ -30,6 +30,7 @@ def build_server(
     reporter: CapabilityReporter,
     dut_network: DutNetwork | None = None,
     device: str | None = None,
+    has_power: bool = True,
     name: str = "raspudger-rig",
 ) -> MCPServer:
     app = MCPServer(name)
@@ -93,8 +94,6 @@ def build_server(
         (tools.uart_exchange, "uart_exchange"),
         (tools.uart_configure, "uart_configure"),
         (tools.uart_handoff, "uart_handoff"),
-        (tools.dut_power, "dut_power"),
-        (tools.dut_power_cycle, "dut_power_cycle"),
         (session.open_device, "device_open"),
         (session.get, "state_get"),
         (session.record_finding, "state_record_finding"),
@@ -104,5 +103,12 @@ def build_server(
     )
     for method, tool_name in passthrough:
         app.add_tool(method, name=tool_name)
+
+    # The power tools actuate the relay, so they are registered only when a power
+    # pin is wired for this bench. The agent's tool list then matches what the
+    # capability report declares.
+    if has_power:
+        app.add_tool(tools.dut_power, name="dut_power")
+        app.add_tool(tools.dut_power_cycle, name="dut_power_cycle")
 
     return app

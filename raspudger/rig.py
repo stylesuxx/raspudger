@@ -23,7 +23,11 @@ from .errors import ConfigError, UsageError
 CONTAINER_PI_KEY = "/rig/pi-key"
 CONTAINER_KNOWN_HOSTS = "/rig/pi-known_hosts"
 
-_REQUIRED = ("RIG_PI_HOST", "RIG_PIN_POWER", "RIG_PIN_UART_TX", "RIG_PI_SSH_KEY")
+_REQUIRED = ("RIG_PI_HOST", "RIG_PIN_UART_TX", "RIG_PI_SSH_KEY")
+
+# The power relay pin. Optional: a bench without it, or a DUT not wired to it,
+# runs with no power tools. Dropped from the injected env when --no-power is set.
+POWER_PIN_KEY = "RIG_PIN_POWER"
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,7 @@ def load_rig_launch(
     host_override: str | None,
     device: str | None = None,
     require_device: bool = True,
+    no_power: bool = False,
 ) -> RigLaunch | None:
     """Build the rig launch config, or None when no rig is configured.
 
@@ -52,7 +57,9 @@ def load_rig_launch(
     returned as mounts. ``device`` names the DUT this session works on and is
     injected as ``RIG_DEVICE`` to bind per-device project state; when
     ``require_device`` is set a configured rig without a device is rejected.
-    Missing required settings raise UsageError.
+    ``no_power`` drops the power relay pin from the injected env, so this session
+    runs with no power tools even on a bench that wires the relay. Missing
+    required settings raise UsageError.
     """
     raw: dict[str, str] = {}
     if config_path is not None and config_path.exists():
@@ -77,6 +84,10 @@ def load_rig_launch(
     env: dict[str, str] = {k: v for k, v in raw.items() if k.startswith("RIG_")}
     if device:
         env["RIG_DEVICE"] = device
+
+    if no_power:
+        env.pop(POWER_PIN_KEY, None)
+
     mounts: list[RigMount] = []
 
     key_host = Path(env["RIG_PI_SSH_KEY"])

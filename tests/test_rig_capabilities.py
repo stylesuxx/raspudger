@@ -45,6 +45,13 @@ def test_declared_interfaces_cover_uart_and_power() -> None:
     assert "network" not in by_name
 
 
+def test_declared_interfaces_omit_power_without_pin() -> None:
+    config = RigConfig.from_env({"RIG_PI_HOST": "pi.local", "RIG_PIN_UART_TX": "14"})
+    by_name = {interface.name: interface.detail for interface in declared_interfaces(config)}
+    assert "uart" in by_name
+    assert "power" not in by_name
+
+
 def test_declared_interfaces_include_network_when_configured() -> None:
     config = RigConfig.from_env(
         {

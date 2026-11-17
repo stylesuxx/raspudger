@@ -29,8 +29,8 @@ GPIO_TIMEOUT_S = 10.0
 
 @dataclass(frozen=True)
 class PinMap:
-    power: int
     uart_tx: int
+    power: int | None = None
     power_active_high: bool = True
 
 
@@ -117,6 +117,11 @@ class SshTransport:
         return b""
 
     def set_power(self, on: bool) -> None:
+        # Guard a hardware actuation: the power tools are unregistered when no
+        # power pin is configured, so reaching here without one is a wiring bug.
+        if self._pins.power is None:
+            raise RuntimeError("power control requested but no power pin is configured")
+
         level = "dh" if on == self._pins.power_active_high else "dl"
         self._run(f"pinctrl set {self._pins.power} op {level}", GPIO_TIMEOUT_S)
 

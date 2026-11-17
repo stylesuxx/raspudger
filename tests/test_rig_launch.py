@@ -82,11 +82,26 @@ def test_only_rig_prefixed_keys_pass_through(tmp_path: Path) -> None:
     assert "UNRELATED" not in launch.env
 
 
-@pytest.mark.parametrize("missing_line", ["RIG_PIN_POWER=17", "RIG_PI_SSH_KEY=/keys/rig"])
+@pytest.mark.parametrize("missing_line", ["RIG_PI_HOST=pi.local", "RIG_PI_SSH_KEY=/keys/rig"])
 def test_missing_required_raises(tmp_path: Path, missing_line: str) -> None:
     body = "\n".join(line for line in FULL.strip().splitlines() if line != missing_line)
     with pytest.raises(UsageError, match="missing required"):
         load_rig_launch(write_rig_config(tmp_path, body), None)
+
+
+def test_power_pin_is_optional(tmp_path: Path) -> None:
+    body = "\n".join(line for line in FULL.strip().splitlines() if line != "RIG_PIN_POWER=17")
+    launch = load_rig_launch(write_rig_config(tmp_path, body), None, "router-a")
+    assert launch is not None
+    assert "RIG_PIN_POWER" not in launch.env
+
+
+def test_no_power_drops_the_pin(tmp_path: Path) -> None:
+    launch = load_rig_launch(write_rig_config(tmp_path, FULL), None, "router-a", no_power=True)
+    assert launch is not None
+    assert "RIG_PIN_POWER" not in launch.env
+    # The rest of the rig config is untouched.
+    assert launch.env["RIG_PIN_UART_TX"] == "14"
 
 
 def test_host_override_without_config_is_incomplete(tmp_path: Path) -> None:

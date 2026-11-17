@@ -43,6 +43,7 @@ def _server(
     transport: FakeTransport | None = None,
     dut_network: DutNetwork | None = None,
     device: str | None = "router-a",
+    has_power: bool = True,
 ) -> MCPServer:
     resolved = transport or FakeTransport()
     tools = RigTools(transport=resolved)
@@ -50,7 +51,7 @@ def _server(
         transport=resolved,
         declared=[DeclaredInterface("uart", {"tx_pin": 14})],
     )
-    return build_server(tools, StateStore(root=tmp_path), reporter, dut_network, device)
+    return build_server(tools, StateStore(root=tmp_path), reporter, dut_network, device, has_power)
 
 
 def _call(app: MCPServer, name: str, arguments: dict[str, object]) -> dict[str, object]:
@@ -64,6 +65,16 @@ def test_lists_expected_tools(tmp_path: Path) -> None:
     app = _server(tmp_path)
     names = {t.name for t in asyncio.run(app.list_tools())}
     assert names >= EXPECTED_TOOLS
+
+
+def test_power_tools_absent_without_power(tmp_path: Path) -> None:
+    app = _server(tmp_path, has_power=False)
+    names = {t.name for t in asyncio.run(app.list_tools())}
+    assert "dut_power" not in names
+    assert "dut_power_cycle" not in names
+    # The rest of the surface is unaffected.
+    assert "uart_send" in names
+    assert "pi_exec" in names
 
 
 def test_pi_exec_through_server(tmp_path: Path) -> None:

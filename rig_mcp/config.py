@@ -50,6 +50,17 @@ def _optional_int(env: Mapping[str, str], key: str, default: int) -> int:
         raise RigConfigError(f"{key} must be an integer, got {raw!r}") from error
 
 
+def _optional_int_or_none(env: Mapping[str, str], key: str) -> int | None:
+    raw: str | None = env.get(key)
+    if raw is None or raw == "":
+        return None
+
+    try:
+        return int(raw)
+    except ValueError as error:
+        raise RigConfigError(f"{key} must be an integer, got {raw!r}") from error
+
+
 def _optional_float(env: Mapping[str, str], key: str, default: float) -> float:
     raw: str | None = env.get(key)
     if raw is None or raw == "":
@@ -130,14 +141,19 @@ class RigConfig:
     device: str | None
     dut_network: DutNetwork | None
 
+    @property
+    def has_power(self) -> bool:
+        """Whether a power relay is wired for this bench, so power tools apply."""
+        return self.pins.power is not None
+
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> RigConfig:
         pi_host: str = _require(env, "RIG_PI_HOST")
         key_raw: str | None = env.get("RIG_PI_SSH_KEY")
         known_hosts_raw: str | None = env.get("RIG_PI_KNOWN_HOSTS")
         pins = PinMap(
-            power=_require_int(env, "RIG_PIN_POWER"),
             uart_tx=_require_int(env, "RIG_PIN_UART_TX"),
+            power=_optional_int_or_none(env, "RIG_PIN_POWER"),
             power_active_high=_optional_bool(env, "RIG_POWER_ACTIVE_HIGH", True),
         )
 
