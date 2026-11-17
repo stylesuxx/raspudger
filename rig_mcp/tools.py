@@ -212,14 +212,13 @@ class RigTools:
         timeout_s: float = 30.0,
         idle_timeout_s: float | None = None,
     ) -> dict[str, object]:
-        """Stream UART output to a file over the owned connection.
+        """Stream UART output to ``out_path`` over the owned connection.
 
-        Fires an optional ``trigger`` then records everything the DUT sends to
-        ``out_path`` until ``until_pattern`` matches, ``timeout_s`` elapses, or
-        the line stays quiet for ``idle_timeout_s``. The bytes go to the file,
-        not the response, so a boot log or a memory dump does not flow through the
-        agent's context or hit the output cap. The returned ``head`` is the first
-        bytes for a quick look; read ``path`` for the whole capture.
+        Fires an optional ``trigger`` then records to the file until
+        ``until_pattern`` matches, ``timeout_s`` elapses, or the line stays quiet
+        for ``idle_timeout_s``. Returns the byte count, a bounded ``head``, and
+        ``ended_on``; the bytes go to the file, never the return value. The
+        ``uart_capture`` tool wraps this with the device's capture path.
         """
         matcher = re.compile(until_pattern.encode()) if until_pattern else None
         out_path.parent.mkdir(parents=True, exist_ok=True)

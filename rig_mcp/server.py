@@ -3,18 +3,25 @@
 Transport-agnostic: ``build_server`` takes ``RigTools`` (over any ``Transport``)
 and a ``StateStore``, so the fast tests drive it over ``FakeTransport`` and the
 live server over ``SshTransport``.
+
+Most tools are pure pass-throughs to a method on ``RigTools`` or ``DeviceState``,
+so they are registered by reference from those methods: the agent-facing name,
+description, and parameter schema come from the implementation and cannot drift
+from it. Only a tool with server-local logic (a capability report, the network
+credentials, a capture that spans the transport and the device workspace) is
+written out here.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 from mcp.server.mcpserver import MCPServer
 
 from .capabilities import CapabilityReporter
 from .config import DutNetwork
-from .state import StateError, StateStore
+from .state import DeviceState, StateError, StateStore
 from .tools import RigTools
-
-_NO_DEVICE_ERROR = "no device is bound to this session; launch the rig with --device <slug>"
 
 
 def build_server(
@@ -26,6 +33,7 @@ def build_server(
     name: str = "raspudger-rig",
 ) -> MCPServer:
     app = MCPServer(name)
+    session = DeviceState(store, device)
 
     @app.tool()
     def rig_capabilities() -> dict[str, object]:
@@ -52,36 +60,6 @@ def build_server(
         }
 
     @app.tool()
-    def pi_exec(command: str, timeout_s: float = 30.0) -> dict[str, object]:
-        return tools.pi_exec(command, timeout_s)
-
-    @app.tool()
-    def list_scripts() -> dict[str, object]:
-        return tools.list_scripts()
-
-    @app.tool()
-    def run_script(
-        name: str, args: list[str] | None = None, timeout_s: float = 30.0
-    ) -> dict[str, object]:
-        return tools.run_script(name, args, timeout_s)
-
-    @app.tool()
-    def uart_send(data: str, line_delay_ms: int = 0) -> dict[str, object]:
-        return tools.uart_send(data, line_delay_ms)
-
-    @app.tool()
-    def uart_expect(pattern: str, timeout_s: float) -> dict[str, object]:
-        return tools.uart_expect(pattern, timeout_s)
-
-    @app.tool()
-    def uart_exchange(
-        steps: list[dict[str, object]],
-        default_timeout_s: float = 1.0,
-        line_delay_ms: int = 0,
-    ) -> dict[str, object]:
-        return tools.uart_exchange(steps, default_timeout_s, line_delay_ms)
-
-    @app.tool()
     def uart_capture(
         out_name: str,
         trigger: str = "",
@@ -96,102 +74,35 @@ def build_server(
         a short ``head`` plus the file path come back, so large output never
         floods the agent's context or trips the output cap.
         """
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
         try:
-            path = store.capture_path(device, out_name)
+            path = session.capture_path(out_name)
         except StateError as error:
             return {"error": str(error)}
 
         return tools.uart_capture(path, trigger, until_pattern, timeout_s, idle_timeout_s)
 
-    @app.tool()
-    def uart_configure(mode: str, flow: str = "none") -> dict[str, object]:
-        """Set the persistent serial line settings for the interactive tools.
-
-        ``mode`` is a ser2net serialdev mode such as ``115200n81`` or ``57600e71``,
-        for a DUT whose console is not 115200 8N1. ``flow`` is none, rtscts, or
-        xonxoff. The setting persists until changed again.
-        """
-        return tools.uart_configure(mode, flow)
-
-    @app.tool()
-    def uart_handoff(
-        command: str, timeout_s: float = 120.0, baud: int | None = None
-    ) -> dict[str, object]:
-        """Run a Pi-side command with exclusive ownership of the raw serial line.
-
-        The escape hatch for serial tools the rig does not model directly
-        (``sz``/``rx``, ``flashrom``, a custom script): ser2net is stopped so the
-        command owns ``$RIG_UART_DEVICE``, then restarted so the line is always
-        reclaimed. The command may write its output to a Pi-side file you then
-        pull with ``pi_exec``.
-        """
-        return tools.uart_handoff(command, timeout_s, baud)
-
-    @app.tool()
-    def dut_power(state: str) -> dict[str, object]:
-        return tools.dut_power(state)
-
-    @app.tool()
-    def dut_power_cycle(off_ms: int = 2000) -> dict[str, object]:
-        return tools.dut_power_cycle(off_ms)
-
-    @app.tool()
-    def state_get() -> dict[str, object]:
-        """Return the bound device's cumulative project state (its findings)."""
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        return store.get(device)
-
-    @app.tool()
-    def state_record_finding(finding: dict[str, object]) -> dict[str, object]:
-        """Append a finding to the bound device's persistent state."""
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        return store.record_finding(device, finding)
-
-    @app.tool()
-    def device_open(identity: dict[str, object]) -> dict[str, object]:
-        """Load or create the bound device's record from observed traits.
-
-        Pass the identity traits you read off the DUT (a UART banner, an ``id``
-        command, a chip marking). A later session whose traits differ returns a
-        warning that a different DUT may be wired under this device slug.
-        """
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        return store.open_device(device, identity)
-
-    @app.tool()
-    def state_snapshot(snapshot_id: str) -> dict[str, object]:
-        """Copy the bound device's state into a named, restorable snapshot."""
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        return store.snapshot(device, snapshot_id)
-
-    @app.tool()
-    def state_restore(snapshot_id: str) -> dict[str, object]:
-        """Roll the bound device's state back to a named snapshot."""
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        try:
-            return store.restore(device, snapshot_id)
-        except StateError as error:
-            return {"error": str(error)}
-
-    @app.tool()
-    def state_list_snapshots() -> dict[str, object]:
-        """List the bound device's snapshot ids."""
-        if device is None:
-            return {"error": _NO_DEVICE_ERROR}
-
-        return {"snapshots": store.list_snapshots(device)}
+    # Pass-through tools: (implementation method, agent-facing tool name). The
+    # method is the single source of signature and description; adding a tool is
+    # one line here plus the method on RigTools or DeviceState.
+    passthrough: tuple[tuple[Callable[..., dict[str, object]], str], ...] = (
+        (tools.pi_exec, "pi_exec"),
+        (tools.list_scripts, "list_scripts"),
+        (tools.run_script, "run_script"),
+        (tools.uart_send, "uart_send"),
+        (tools.uart_expect, "uart_expect"),
+        (tools.uart_exchange, "uart_exchange"),
+        (tools.uart_configure, "uart_configure"),
+        (tools.uart_handoff, "uart_handoff"),
+        (tools.dut_power, "dut_power"),
+        (tools.dut_power_cycle, "dut_power_cycle"),
+        (session.open_device, "device_open"),
+        (session.get, "state_get"),
+        (session.record_finding, "state_record_finding"),
+        (session.snapshot, "state_snapshot"),
+        (session.restore, "state_restore"),
+        (session.list_snapshots, "state_list_snapshots"),
+    )
+    for method, tool_name in passthrough:
+        app.add_tool(method, name=tool_name)
 
     return app
