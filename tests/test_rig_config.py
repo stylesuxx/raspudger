@@ -29,6 +29,12 @@ def test_from_env_applies_defaults() -> None:
     assert config.pins.power_active_high is True
     assert config.state_root == Path("data/projects")
     assert config.uart_read_timeout == 0.1
+    assert config.device is None
+
+
+def test_from_env_reads_device() -> None:
+    config = RigConfig.from_env(minimal_env() | {"RIG_DEVICE": "router-a"})
+    assert config.device == "router-a"
 
 
 def test_from_env_reads_overrides() -> None:

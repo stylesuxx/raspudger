@@ -161,6 +161,11 @@ def test_network_defaults_none_and_parses() -> None:
     assert parse_args(["--agent", "claude", "--network", "netx"]).network == "netx"
 
 
+def test_device_defaults_none_and_parses() -> None:
+    assert parse_args(["--agent", "claude"]).device is None
+    assert parse_args(["--agent", "claude", "--device", "router-a"]).device == "router-a"
+
+
 def test_permission_mode_defaults_to_bypass_and_overrides() -> None:
     from raspudger.args import DEFAULT_PERMISSION_MODE
 

@@ -39,12 +39,20 @@ class RigLaunch:
     mounts: list[RigMount]
 
 
-def load_rig_launch(config_path: Path | None, host_override: str | None) -> RigLaunch | None:
+def load_rig_launch(
+    config_path: Path | None,
+    host_override: str | None,
+    device: str | None = None,
+    require_device: bool = True,
+) -> RigLaunch | None:
     """Build the rig launch config, or None when no rig is configured.
 
     A rig is configured when the config file exists or ``--rig-host`` is given.
     Host-side key and known_hosts paths are remapped to container paths and
-    returned as mounts. Missing required settings raise UsageError.
+    returned as mounts. ``device`` names the DUT this session works on and is
+    injected as ``RIG_DEVICE`` to bind per-device project state; when
+    ``require_device`` is set a configured rig without a device is rejected.
+    Missing required settings raise UsageError.
     """
     raw: dict[str, str] = {}
     if config_path is not None and config_path.exists():
@@ -63,7 +71,12 @@ def load_rig_launch(config_path: Path | None, host_override: str | None) -> RigL
     if missing:
         raise UsageError(f"rig config missing required settings: {', '.join(missing)}")
 
+    if require_device and not device:
+        raise UsageError("a rig is configured but no device is named; pass --device <slug>")
+
     env: dict[str, str] = {k: v for k, v in raw.items() if k.startswith("RIG_")}
+    if device:
+        env["RIG_DEVICE"] = device
     mounts: list[RigMount] = []
 
     key_host = Path(env["RIG_PI_SSH_KEY"])

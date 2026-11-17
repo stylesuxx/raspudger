@@ -15,7 +15,7 @@ def _rig_launch(tmp_path: Path):
     config.write_text(
         "RIG_PI_HOST=pi.local\nRIG_PI_SSH_KEY=/keys/rig\nRIG_PIN_POWER=17\nRIG_PIN_UART_TX=14\n"
     )
-    return load_rig_launch(config, None)
+    return load_rig_launch(config, None, "router-a")
 
 
 def _mcp_config_from_argv(argv: list[str]) -> dict:
@@ -96,6 +96,8 @@ def test_rig_mounts_key_and_registers_mcp_server(tmp_path: Path) -> None:
             str(project),
             "--agent-home",
             str(home),
+            "--device",
+            "router-a",
             "--task",
             "scan",
         ]
@@ -114,8 +116,42 @@ def test_rig_mounts_key_and_registers_mcp_server(tmp_path: Path) -> None:
     assert server["command"] == "rig-mcp-server"
     assert server["env"]["RIG_PI_HOST"] == "pi.local"
     assert server["env"]["RIG_PI_SSH_KEY"] == CONTAINER_PI_KEY
+    # State root is the mount root; the server appends the device under it.
+    assert server["env"]["RIG_STATE_ROOT"] == "/rig/work"
+    assert server["env"]["RIG_DEVICE"] == "router-a"
     # The strict flag precedes -p so the task still runs headless.
     assert invocation.argv[-2:] == ["-p", "scan"]
+
+
+def test_bound_device_mounts_only_that_device(tmp_path: Path) -> None:
+    config = tmp_path / "config.env"
+    config.write_text("placeholder")
+    project = tmp_path / "project"
+    project.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    args = parse_args(
+        [
+            "--agent",
+            "claude",
+            "--config",
+            str(config),
+            "--project-folder",
+            str(project),
+            "--agent-home",
+            str(home),
+            "--device",
+            "router-a",
+        ]
+    )
+    invocation = build_docker_command(
+        args=args, adapter=resolve_adapter("claude"), credential=None, image=IMAGE
+    )
+    device_host = (project / "router-a").resolve()
+    assert f"{device_host}:/rig/work/router-a" in invocation.argv
+    assert f"{project.resolve()}:/rig/work" not in invocation.argv
+    i = invocation.argv.index("-w")
+    assert invocation.argv[i + 1] == "/rig/work/router-a"
 
 
 def test_interactive_adds_tty(tmp_path: Path) -> None:

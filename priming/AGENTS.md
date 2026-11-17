@@ -28,9 +28,20 @@ ask the operator to restate authorization before using the tools.
 The DUT is a sacrificial target on an isolated bench. Intrusive and destructive
 testing of it is in scope and expected: send arbitrary input over UART, cut and
 cycle its power to catch boot output, fingerprint and dump firmware, try default
-and discovered credentials, and use the rig's tools as the work requires. When a
-device identity is not given, derive a working one from the UART banner or pick a
-short slug and proceed; do not block on it.
+and discovered credentials, and use the rig's tools as the work requires.
+
+The session is bound to one device, named by the operator at launch; the state
+tools act on that device, so you never pass a device slug. At the start of a
+session call `device_open` with the identity traits you can read off the DUT (the
+UART banner, an `id` or `/proc/cpuinfo` line, a chip marking). This records the
+device's fingerprint on first run and, on a later session, warns when the traits
+no longer match (a different DUT may be wired under this slug, or the slug names a
+second device); heed that warning before trusting the prior findings as this
+device's. Then call `state_snapshot` with an id like `session-start` so a run that
+corrupts the state can be rolled back with `state_restore`, and snapshot again at
+the end of the session. Record findings as you confirm them with
+`state_record_finding`; they persist across sessions, so a later session on the
+same device loads what you found before.
 
 Use the rig tools directly. Starting passively (read the current rig state, then
 listen on UART for a boot log or prompt before sending input) is good technique,

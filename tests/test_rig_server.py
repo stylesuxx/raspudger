@@ -28,6 +28,10 @@ EXPECTED_TOOLS = {
     "dut_power_cycle",
     "state_get",
     "state_record_finding",
+    "device_open",
+    "state_snapshot",
+    "state_restore",
+    "state_list_snapshots",
 }
 
 
@@ -35,6 +39,7 @@ def _server(
     tmp_path: Path,
     transport: FakeTransport | None = None,
     dut_network: DutNetwork | None = None,
+    device: str | None = "router-a",
 ) -> MCPServer:
     resolved = transport or FakeTransport()
     tools = RigTools(transport=resolved)
@@ -42,7 +47,7 @@ def _server(
         transport=resolved,
         declared=[DeclaredInterface("uart", {"tx_pin": 14})],
     )
-    return build_server(tools, StateStore(root=tmp_path), reporter, dut_network)
+    return build_server(tools, StateStore(root=tmp_path), reporter, dut_network, device)
 
 
 def _call(app: MCPServer, name: str, arguments: dict[str, object]) -> dict[str, object]:
@@ -123,10 +128,42 @@ def test_dut_network_info_configured(tmp_path: Path) -> None:
     }
 
 
+def test_device_open_through_server(tmp_path: Path) -> None:
+    app = _server(tmp_path)
+    payload = _call(app, "device_open", {"identity": {"soc": "bcm2711"}})
+    assert payload["warnings"] == []
+    record = payload["record"]
+    assert isinstance(record, dict)
+    assert record["slug"] == "router-a"
+
+
+def test_snapshot_and_restore_through_server(tmp_path: Path) -> None:
+    app = _server(tmp_path)
+    _call(app, "state_record_finding", {"finding": {"cve": "CVE-1"}})
+    _call(app, "state_snapshot", {"snapshot_id": "s1"})
+    _call(app, "state_record_finding", {"finding": {"cve": "CVE-2"}})
+    _call(app, "state_restore", {"snapshot_id": "s1"})
+    findings = _call(app, "state_get", {})["findings"]
+    assert isinstance(findings, list)
+    assert [f["cve"] for f in findings] == ["CVE-1"]
+
+
+def test_restore_missing_snapshot_returns_error(tmp_path: Path) -> None:
+    app = _server(tmp_path)
+    payload = _call(app, "state_restore", {"snapshot_id": "nope"})
+    assert "no snapshot" in str(payload["error"])
+
+
 def test_state_roundtrip_through_server(tmp_path: Path) -> None:
     app = _server(tmp_path)
-    _call(app, "state_record_finding", {"device": "d1", "finding": {"cve": "CVE-9"}})
-    payload = _call(app, "state_get", {"device": "d1"})
+    _call(app, "state_record_finding", {"finding": {"cve": "CVE-9"}})
+    payload = _call(app, "state_get", {})
     findings = payload["findings"]
     assert isinstance(findings, list)
     assert findings[0]["cve"] == "CVE-9"
+
+
+def test_state_tools_error_without_bound_device(tmp_path: Path) -> None:
+    app = _server(tmp_path, device=None)
+    payload = _call(app, "state_record_finding", {"finding": {"cve": "CVE-1"}})
+    assert "no device is bound" in str(payload["error"])
