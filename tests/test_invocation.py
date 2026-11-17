@@ -4,7 +4,7 @@ from pathlib import Path
 from raspudger.adapters import resolve_adapter
 from raspudger.args import parse_args
 from raspudger.config import Credential
-from raspudger.invocation import DockerInvocation, build_docker_command
+from raspudger.invocation import PIDS_LIMIT, DockerInvocation, build_docker_command
 from raspudger.rig import CONTAINER_PI_KEY, load_rig_launch
 
 IMAGE = "raspudger-agent:latest"
@@ -66,6 +66,16 @@ def test_builds_docker_run(tmp_path: Path) -> None:
     assert "-w" in invocation.argv
     assert "/rig/work" in invocation.argv
     assert "claude" in invocation.argv
+
+
+def test_applies_break_out_hardening_flags(tmp_path: Path) -> None:
+    invocation, _project, _home = _build(tmp_path)
+    assert "--security-opt" in invocation.argv
+    opt_index = invocation.argv.index("--security-opt")
+    assert invocation.argv[opt_index + 1] == "no-new-privileges"
+    assert "--pids-limit" in invocation.argv
+    pids_index = invocation.argv.index("--pids-limit")
+    assert invocation.argv[pids_index + 1] == str(PIDS_LIMIT)
 
 
 def test_mounts_agent_home_and_sets_config_dir(tmp_path: Path) -> None:
